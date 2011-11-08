@@ -3,6 +3,7 @@ package snappy.graph;
 import snappy.data.*;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.PriorityQueue;
 import java.util.TreeSet;
@@ -23,11 +24,20 @@ public class GraphManager {
 	
 	int componentCount = 0;				// the number of connected components
 	
-	ArrayList<TreeSet<SimpleEdge>> nodeEdgeLookup = null; // maintains a list of edges for each node
+	ArrayList<ArrayList<SimpleEdge>> nodeEdgeLookup = null; // maintains a list of edges for each node
+//	ArrayList<TreeSet<SimpleEdge>> nodeEdgeLookup = null; // maintains a list of edges for each node
 	ArrayList<ArrayList<Integer>> subComponents = null;  // maintains a list of components and their membership
 	
 	ArrayList<ChangeListener> changeListeners = null;
 
+	public void sortEdges( ) {
+		
+		for( ArrayList<SimpleEdge> edges : nodeEdgeLookup ) {
+			
+			Collections.sort( edges, seComp );
+		}
+	}
+	
 	
 	public class SimpleEdgeComparator implements Comparator<SimpleEdge> {
 		
@@ -69,10 +79,10 @@ public class GraphManager {
 		
 		this();
 		
-		nodeEdgeLookup = new ArrayList<TreeSet<SimpleEdge>>(nzd.getPointCount());
+		nodeEdgeLookup = new ArrayList<ArrayList<SimpleEdge>>(nzd.getPointCount());
 		for( int i = 0; i < nzd.getPointCount(); i++ ) {
 			
-			nodeEdgeLookup.add(new TreeSet<SimpleEdge>( seComp ));
+			nodeEdgeLookup.add(new ArrayList<SimpleEdge>( ));
 		}
 		this.nzd = nzd;
 		this.edge_list = new PriorityQueue<SimpleEdge>( nzd.getPointCount(), seComp );
@@ -83,10 +93,10 @@ public class GraphManager {
 		
 		this();
 		
-		nodeEdgeLookup = new ArrayList<TreeSet<SimpleEdge>>(dfunc.getPointCount());
+		nodeEdgeLookup = new ArrayList<ArrayList<SimpleEdge>>(dfunc.getPointCount());
 		for( int i = 0; i < dfunc.getPointCount(); i++ ) {
 			
-			nodeEdgeLookup.add(new TreeSet<SimpleEdge>( seComp ));
+			nodeEdgeLookup.add(new ArrayList<SimpleEdge>( ));
 		}
 		this.edge_list = new PriorityQueue<SimpleEdge>( dfunc.getPointCount(), seComp );
 		this.dfunc = dfunc;

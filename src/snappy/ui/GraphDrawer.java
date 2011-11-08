@@ -44,7 +44,7 @@ public class GraphDrawer extends PApplet implements  ComponentListener {
 					pa.textFont(summary_font);
 					
 					String summaryLabel = " " + gl.getNumPoints() + ": ";
-					for( SizedLabel sl : node_labeller.getSummaryLabel(gl) ) {
+					for( SizedLabel sl : node_labeller.getSummaryLabel(gl.getNode()) ) {
 						
 						summaryLabel += sl.label + " ";
 					}
@@ -219,7 +219,7 @@ public class GraphDrawer extends PApplet implements  ComponentListener {
 				float space_width = textWidth(" ");
 				
 				String summaryLabel = " " + gl.getNumPoints() + ": ";
-				for( SizedLabel sl : node_labeller.getSummaryLabel(gl) ) {
+				for( SizedLabel sl : node_labeller.getSummaryLabel(gl.getNode()) ) {
 					
 					summaryLabel += sl.label + " ";
 				}
@@ -235,7 +235,7 @@ public class GraphDrawer extends PApplet implements  ComponentListener {
 				float space_width = textWidth(" ");
 				
 				String summaryLabel = " " + gl.getNumPoints() + ": ";
-				for( SizedLabel sl : node_labeller.getSummaryLabel(gl) ) {
+				for( SizedLabel sl : node_labeller.getSummaryLabel(gl.getNode()) ) {
 					
 					summaryLabel += sl.label + " ";
 				}

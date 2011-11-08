@@ -7,7 +7,7 @@ import snappy.pack.IImageInfo;
 public class GraphLayout implements IImageInfo {
 
 	private ArrayList<PointData> pts = null; 
-	private TopoTree.TopoTreeNode node = null;
+	private TopoTreeNode node = null;
 	private PointData upperLeft = null;
 	private PointData lowerRight = null;
 	int num_points = -1;
@@ -154,7 +154,7 @@ public class GraphLayout implements IImageInfo {
 //		setLayoutType(layoutType);
 //	}
 	
-	public GraphLayout(TopoTree.TopoTreeNode node, LayoutType type ) {
+	public GraphLayout(TopoTreeNode node, LayoutType type ) {
 		
 		this.layoutType=type;
 		this.node = node;
@@ -180,11 +180,11 @@ public class GraphLayout implements IImageInfo {
 //		this(gm,component,LayoutType.VERTICAL_LAYOUT);
 //	}
 	
-	public TopoTree.TopoTreeNode getNode() {
+	public TopoTreeNode getNode() {
 		return node;
 	}
 	
-	public GraphLayout(TopoTree.TopoTreeNode node) {
+	public GraphLayout(TopoTreeNode node) {
 		
 		this(node,LayoutType.VERTICAL_LAYOUT);
 	}

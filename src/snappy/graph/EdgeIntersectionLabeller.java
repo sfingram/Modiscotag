@@ -40,11 +40,11 @@ public class EdgeIntersectionLabeller implements NodeLabeller {
 		
 		labelCache = new String[gm.getNodeCount()];
 		Arrays.fill(labelCache,null);
-		summaryLabelCache = new HashMap<GraphLayout,SizedLabel[]>();
+		summaryLabelCache = new HashMap<TopoTreeNode,SizedLabel[]>();
 	}
 	
 	private String[] labelCache = null;
-	private HashMap<GraphLayout,SizedLabel[]> summaryLabelCache = null;
+	private HashMap<TopoTreeNode,SizedLabel[]> summaryLabelCache = null;
 	
 	@Override
 	public String getLabel(int node_number) {
@@ -144,17 +144,17 @@ public class EdgeIntersectionLabeller implements NodeLabeller {
 	}
 
 	@Override
-	public SizedLabel[] getSummaryLabel( GraphLayout gl ) {
+	public SizedLabel[] getSummaryLabel( TopoTreeNode node ) {
 		
-		if( !summaryLabelCache.containsKey(gl) ) {
+		if( !summaryLabelCache.containsKey(node) ) {
 			
 			
 			ArrayList<TermMultiplier> terms = new ArrayList<TermMultiplier>();
 			HashMap<String,Float> termsMap  = new HashMap<String,Float>();
 			
-			for( int i = 0; i < gl.getNumPoints(); i++ ) {
+			for( int i = 0; i < node.num_points; i++ ) {
 				
-				for( NZEntry nze : m_nz.nzEntryDataUnordered.get(gl.getPoint(i).idx) ) {
+				for( NZEntry nze : m_nz.nzEntryDataUnordered.get(node.component.get(i)) ) {
 					
 					String feature = m_fl.featureAt(nze.dimension);
 					if( termsMap.containsKey(feature) ) {
@@ -196,10 +196,10 @@ public class EdgeIntersectionLabeller implements NodeLabeller {
 				if(inner_label_count>=MAXLABELS)
 					break;
 			}
-			summaryLabelCache.put(gl, summaryLabelCachePut);
+			summaryLabelCache.put(node, summaryLabelCachePut);
 		}
 		
-		return summaryLabelCache.get(gl);
+		return summaryLabelCache.get(node);
 	}
 
 }

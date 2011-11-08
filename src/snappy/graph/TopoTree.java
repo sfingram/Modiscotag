@@ -20,8 +20,8 @@ public class TopoTree {
 		
 		component_sizes = new HashMap<Integer, Integer>();
 		num_levels = levels.length;
-		roots = new ArrayList<TopoTree.TopoTreeNode>();
-		tree_lookup = new ArrayList<TopoTree.TopoTreeNode[]>();
+		roots = new ArrayList<TopoTreeNode>();
+		tree_lookup = new ArrayList<TopoTreeNode[]>();
 		level_lookup = new ArrayList<ArrayList<TopoTreeNode>>();
 		
 		for( int i = 0; i < num_levels; i++ ) {
@@ -29,7 +29,7 @@ public class TopoTree {
 			// init a lookup table for this layer 
 			
 			tree_lookup.add( new TopoTreeNode[gm.getNodeCount()] );
-			level_lookup.add(new ArrayList<TopoTree.TopoTreeNode>());
+			level_lookup.add(new ArrayList<TopoTreeNode>());
 			
 			// set the cutoff and build the components
 			
@@ -83,27 +83,6 @@ public class TopoTree {
 			}
 		}
 	}
-	
-	public class TopoTreeNode {
-		
-		public int num_points;		
-		public TopoTreeNode parent;
-		public ArrayList<TopoTreeNode> children;
-		public boolean hilighted;
-		public ArrayList<Integer> component;
-		public int x;
-		
-		public TopoTreeNode() {
-			
-			x = 0;
-			hilighted=false;
-			num_points = 0;
-			parent = null;
-			children = new ArrayList<TopoTree.TopoTreeNode>();
-			component = null;
-		}
-	}
-	
 	
 	public TopoTreeNode lookupNode( int level ) {
 	

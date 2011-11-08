@@ -25,7 +25,7 @@ public class SimpleNodeLabeller implements NodeLabeller {
 
 
 	@Override
-	public SizedLabel[] getSummaryLabel(GraphLayout gl) {
+	public SizedLabel[] getSummaryLabel(TopoTreeNode gl) {
 		
 		return null;
 	}

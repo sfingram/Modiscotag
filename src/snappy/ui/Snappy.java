@@ -29,6 +29,7 @@ import snappy.graph.NodeLabeller;
 import snappy.graph.SimpleNodeLabeller;
 import snappy.graph.GraphLayout.LayoutType;
 import snappy.graph.TopoTree;
+import snappy.graph.TopoTreeNode;
 
 public class Snappy extends JFrame implements ChangeListener {
 
@@ -36,15 +37,17 @@ public class Snappy extends JFrame implements ChangeListener {
 	 * 
 	 */
 	private static final long serialVersionUID = -6484320090318536140L;
-	public static String VERSION_STRING = "0.0.1";
-	public static int DISTANCE_BINS 	= 25;
+	public static String VERSION_STRING = "0.0.3";	// updated after every commit
+	public static int DISTANCE_BINS 	= 25;		// how many bins between 0 ... 1
 	
 	int default_component_bin = 1;
 	
-	String nonzero_data_filename = "";
+	String nonzero_data_filename = "";		// command line filenames
 	String df_data_filename 	 = "";
 	String point_label_filename  = "";
 	String nz_feature_label_filename = "";
+	String html_prefix_name = "";
+	String html_listname = "";
 	
 	float[] current_histo = null;			// current state of the distance histogram
 	HistSlider component_slider = null;		// slider that controls which components we see
@@ -57,15 +60,26 @@ public class Snappy extends JFrame implements ChangeListener {
 	GraphManager graph_manager = null;		
 	TopoTree topo_tree		   = null;
 	float initial_cutoff_value = 1.f;
-	GraphDrawer graph_drawer = null;
+//	GraphDrawer graph_drawer = null;
+	NodeTree node_tree_control = null;
+	HtmlDispatch html_dispatch = null;
 	
-	ArrayList<GraphLayout> graph_layouts = null;
+//	ArrayList<GraphLayout> graph_layouts = null;
 	
 	boolean is_sparse = false;				// controls if we're reading sparse or not
+	boolean is_low_level_enabled = false;	// determines if we're dispatching low level viewers
 	
 	FeatureList point_feature_list = null;
 	FeatureList edge_feature_list = null;
 	NodeLabeller node_labeller = null;
+	
+	ArrayList<TopoTreeSelectionListener> ttselListeners = null;
+	public void addTopoTreeSelectionListener( TopoTreeSelectionListener ttsl ) {
+		
+		this.ttselListeners.add(ttsl);
+	}
+	
+
 	
 	public void parseArgs(String[] args) {
 				
@@ -74,6 +88,9 @@ public class Snappy extends JFrame implements ChangeListener {
 		boolean inIND 	= false;	// 'I' next argument is for indifferentiated value
 		boolean inPF 	= false;	// 'P' next argument is for point label file
 		boolean inNZF 	= false;	// 'Z' next argument is for nonzero label file
+		boolean inHTML  = false;    // 'H' next argument is for html url directory
+		
+		int arg_num = 0; 
 		
 		for( String arg : args ) {
 			
@@ -83,7 +100,7 @@ public class Snappy extends JFrame implements ChangeListener {
 
 				// the next argument should *not* be a dash if we're expecting input
 				
-				if( inNZ || inDM || inIND ) {
+				if( inNZ || inDM || inIND || inHTML ) {
 					
 					System.out.println("PARSE ERROR: Trouble parsing argument \"" + arg + "\"");
 					System.exit(0);
@@ -166,6 +183,21 @@ public class Snappy extends JFrame implements ChangeListener {
 						nz_feature_label_filename = arg.substring(2);
 					}
 				}
+				else if( arg.charAt(1) == 'H' ) {
+					
+					inHTML = true; 	// we are using html lookups
+					is_low_level_enabled = true;
+					
+					if( arg.length() == 2 ) {
+						
+						inHTML = true;
+					}
+					else {
+
+						System.err.println("Error parsing HTML command line.");
+						System.exit(0);
+					}
+				}
 				
 				// error switch
 				
@@ -208,11 +240,26 @@ public class Snappy extends JFrame implements ChangeListener {
 				nz_feature_label_filename = arg;
 				inNZF = false;
 			}			
+			
+			else if( inHTML ) {
+				
+				if( arg_num == 0) {				// first argument is the exec prefix
+					
+					html_prefix_name = arg;
+					arg_num++;
+				}
+				else if( arg_num == 1 ) {		// second argument is the list of html files
+					
+					html_listname = arg;
+					arg_num = 0;
+					inHTML = false;
+				}
+			}
 		}
 		
 		// check if we never got an expected argument
 		
-		if( inNZ || inDM || inIND || inPF || inNZF ) {
+		if( inNZ || inDM || inIND || inPF || inNZF || inHTML ) {
 			
 			System.err.println("Error parsing input arguments.");
 			System.exit(0);
@@ -284,12 +331,13 @@ public class Snappy extends JFrame implements ChangeListener {
 			}
 			System.out.println("done.");
 		}
-		
+				
 		// let the graph manager run for a moment
 		
 		System.out.print("Loading Initial Edges...");
 		long start_time = System.currentTimeMillis();
 		while( System.currentTimeMillis() - start_time < 5000L && !graph_manager.updateGraph() );
+		graph_manager.sortEdges();
 		System.out.println("done.");
 
 		// compute the topo tree
@@ -301,30 +349,32 @@ public class Snappy extends JFrame implements ChangeListener {
 			mylevels[DISTANCE_BINS-i] = ((float)i) / ((float)DISTANCE_BINS);
 		}
 		topo_tree = new TopoTree(graph_manager, mylevels);
+		ttselListeners = new ArrayList<TopoTreeSelectionListener>();
 		System.out.println("done.");
 		graph_manager.setCutoff(1.f);
+
 		
 		// perform component count and component layout
 		
-		System.out.print("Performing component count...");
-		int component_count = graph_manager.countComponents();
-		System.out.println("Number of components = " + component_count);
-		System.out.println("done.");
-		
-		System.out.print("Performing component layout...");
-		graph_layouts = new ArrayList<GraphLayout>();
-		for( TopoTree.TopoTreeNode node : topo_tree.level_lookup.get(0)) {
-			
-			if(node.num_points > (int)Math.pow(2, 3) )
-				graph_layouts.add(new GraphLayout(node,LayoutType.SUMMARY));
-		}
+//		System.out.print("Performing component count...");
+//		int component_count = graph_manager.countComponents();
+//		System.out.println("Number of components = " + component_count);
+//		System.out.println("done.");
+//		
+//		System.out.print("Performing component layout...");
+//		graph_layouts = new ArrayList<GraphLayout>();
+//		for( TopoTree.TopoTreeNode node : topo_tree.level_lookup.get(0)) {
+//			
+//			if(node.num_points > (int)Math.pow(2, 3) )
+//				graph_layouts.add(new GraphLayout(node,LayoutType.SUMMARY));
+//		}
 //		for( int component = 0; component < component_count; component++ ) {
 //			
 //			System.out.println("Component Size = " + graph_manager.getSubComponents().get(component).size() );
 //			if( graph_manager.getSubComponents().get(component).size() > default_component_bin )
 //				graph_layouts.add(new GraphLayout(graph_manager,component,LayoutType.SUMMARY));
 //		}
-		System.out.println("done.");
+//		System.out.println("done.");
 		
 		// build the initial histograms
 		
@@ -333,12 +383,12 @@ public class Snappy extends JFrame implements ChangeListener {
 //		for( int i = 0; i < trashhisto_comp.length; i++ ) {
 //			System.out.println(""+i+":" + trashhisto_comp[i] );
 //		}
-		component_slider = new HistSlider(graph_manager.getComponentHisto(),default_component_bin);
-		distance_slider  = new HistSlider(graph_manager.getHisto(Snappy.DISTANCE_BINS),0.f,1.f,DISTANCE_BINS-1);
-		distance_slider.isLog = true;
-		distance_slider.useAbsolute = true;
-		component_slider.useAbsolute = true;
-		component_slider.isLog = true;
+//		component_slider = new HistSlider(graph_manager.getComponentHisto(),default_component_bin);
+//		distance_slider  = new HistSlider(graph_manager.getHisto(Snappy.DISTANCE_BINS),0.f,1.f,DISTANCE_BINS-1);
+//		distance_slider.isLog = true;
+//		distance_slider.useAbsolute = true;
+//		component_slider.useAbsolute = true;
+//		component_slider.isLog = true;
 		
 		tt_control = new TopoTreeControl(topo_tree,graph_manager.getHisto(Snappy.DISTANCE_BINS));
 		
@@ -353,8 +403,8 @@ public class Snappy extends JFrame implements ChangeListener {
 		// connect the graph and the sliders
 		
 		graph_manager.addChangeListener(this);
-		component_slider.addChangeListener(this);
-		distance_slider.addChangeListener(this);
+//		component_slider.addChangeListener(this);
+//		distance_slider.addChangeListener(this);
 		tt_control.addChangeListener(this);
 		
 		// build the graph drawing component
@@ -366,43 +416,65 @@ public class Snappy extends JFrame implements ChangeListener {
 		if( edge_feature_list!= null ) {
 			node_labeller = new EdgeIntersectionLabeller(graph_manager, edge_feature_list, nz_data);
 		}
-		graph_drawer = new GraphDrawer( node_labeller );
+		node_tree_control = new NodeTree( node_labeller );
+		this.addTopoTreeSelectionListener(node_tree_control);
+		tt_control.addTopoTreeHilightListener(node_tree_control);
+		node_tree_control.addTopoTreeHilightListener(tt_control);
+		
+		// load html data
+		
+		if( is_low_level_enabled ) {
+			
+			html_dispatch = new HtmlDispatch(	node_tree_control.tree, 
+												html_prefix_name, 
+												HtmlDispatch.loadHTMLList(html_listname));
+		}
+		
+//		graph_drawer = new GraphDrawer( node_labeller );
 		System.out.println("done.");
 		
 		// lay out the components
 		
-		JPanel slider_panels = new JPanel();
-		//slider_panels.setLayout(new GridLayout(2,1) );
-		slider_panels.setLayout(new GridLayout(1,1) );
-//		slider_panels.add(distance_slider);
-		//slider_panels.add(component_slider);
-		slider_panels.add(tt_control);
+//		JPanel slider_panels = new JPanel();
+//		//slider_panels.setLayout(new GridLayout(2,1) );
+//		slider_panels.setLayout(new GridLayout(1,1) );
+////		slider_panels.add(distance_slider);
+//		//slider_panels.add(component_slider);
+//		slider_panels.add(tt_control);
 		
 		this.getContentPane().setLayout(new BorderLayout(5,5));		
-		this.getContentPane().add( slider_panels, "West");
+		this.getContentPane().add( tt_control, "East");
 		
 		//JScrollPane scroll_pane = new JScrollPane(graph_drawer);
-		ScrollPane scroll_pane2 = new ScrollPane(ScrollPane.SCROLLBARS_AS_NEEDED);
-		scroll_pane2.setPreferredSize(new Dimension(500,100));
-		scroll_pane2.add(graph_drawer);
-		scroll_pane2.getVAdjustable().addAdjustmentListener(new AdjustmentListener() {
+//		ScrollPane scroll_pane2 = new ScrollPane(ScrollPane.SCROLLBARS_AS_NEEDED);
+//		scroll_pane2.setPreferredSize(new Dimension(500,100));
+//		scroll_pane2.add(graph_drawer);
+//		scroll_pane2.getVAdjustable().addAdjustmentListener(new AdjustmentListener() {
+//
+//			@Override
+//			public void adjustmentValueChanged(AdjustmentEvent arg0) {
+//				graph_drawer.redraw();
+//				
+//			}} );
+//		this.getContentPane().add( scroll_pane2, "Center" );
 
-			@Override
-			public void adjustmentValueChanged(AdjustmentEvent arg0) {
-				graph_drawer.redraw();
-				
-			}} );
-		this.getContentPane().add( scroll_pane2, "Center" );
+		this.getContentPane().add(node_tree_control, "West");
+		for( TopoTreeSelectionListener ttselListener : ttselListeners ) {
+			
+			ttselListener.selectionChanged(null, null);
+		}
 
+		
 		// init the processing apps
 		
-		distance_slider.init();
-		component_slider.init();
-		graph_drawer.init();
+//		distance_slider.init();
+//		component_slider.init();
+//		graph_drawer.init();
 		tt_control.init();
 
 		// set the proper sizes for the graph drawer
-		graph_drawer.setRectangles(graph_layouts);
+		
+		//graph_drawer.setRectangles(graph_layouts);
 
 		this.pack();
 		this.setVisible(true);
@@ -411,9 +483,10 @@ public class Snappy extends JFrame implements ChangeListener {
 	public static void main( final String[] args ) {
 
         javax.swing.SwingUtilities.invokeLater(new Runnable() {
+        	Snappy snappy = null;
             public void run() {
             	
-            	Snappy snappy = new Snappy(args);
+            	snappy = new Snappy(args);
             }
         } );
 	}
@@ -426,30 +499,54 @@ public class Snappy extends JFrame implements ChangeListener {
 		    SwingUtilities.invokeLater(new Runnable() {
 		        public void run() {
 		          // Set the preferred size so that the layout managers can handle it
-					graph_drawer.redraw();
+//					graph_drawer.redraw();
 		        }
 		      });
 		}
 		if( arg0.getSource() == tt_control.cutoff_changed ) {
 			
-			graph_manager.setCutoff(current_histo[(current_histo.length-tt_control.getSelLevel())-1]);
+//			graph_manager.setCutoff(current_histo[(current_histo.length-tt_control.getSelLevel())-1]);
 		}
-		if( arg0.getSource() == tt_control.compon_changed ) {
+		if( arg0.getSource() == tt_control.compon_changed || arg0.getSource() == tt_control.select_changed ) {
 
-			graph_layouts.clear();
-			for( TopoTree.TopoTreeNode node : tt_control.m_tt.level_lookup.get(tt_control.getSelLevel())) {
-				
-				if(node.num_points > tt_control.getIgnoreComponentSize() )
-					graph_layouts.add(new GraphLayout(node,LayoutType.SUMMARY));
+//			graph_layouts.clear();
+			ArrayList<TopoTreeNode> sel_nodes = new ArrayList<TopoTreeNode>(); 
+			for (ArrayList<TopoTreeNode> nodes : tt_control.m_tt.level_lookup) {
+				for (TopoTreeNode node : nodes) {					
+					if(node.num_points > tt_control.getIgnoreComponentSize() 
+							&& node.selected ) {
+
+						sel_nodes.add( node );
+					}
+				}
 			}
+			
+			TopoTreeNode[] nodes = null;
+			
+			if( sel_nodes.size() > 0 ) {
+				nodes = new TopoTreeNode[sel_nodes.size()];
+				int k = 0;
+				for( TopoTreeNode node : sel_nodes ) {
+					nodes[k]=node;
+					k++;
+				}
+			}
+			for( TopoTreeSelectionListener ttselListener : ttselListeners ) {
+				
+				ttselListener.selectionChanged(nodes, null);
+			}
+			
 //			for( int component = 0; component < graph_manager.getSubComponents().size(); component++ ) {
 //				
 //				if( graph_manager.getSubComponents().get(component).size() > tt_control.getIgnoreComponentSize() )
 //					graph_layouts.add(new GraphLayout(graph_manager,component,LayoutType.SUMMARY));
 //			}
-			graph_drawer.setRectangles(graph_layouts);
-			graph_drawer.packup();
-			graph_drawer.redraw();
+			
+			
+//			
+//			graph_drawer.setRectangles(graph_layouts);
+//			graph_drawer.packup();
+//			graph_drawer.redraw();
 		}
 		if( arg0.getSource() == graph_manager ) {
 			
@@ -462,17 +559,39 @@ public class Snappy extends JFrame implements ChangeListener {
 			
 			// the graph has changed, update the controls
 			
-			component_slider.setBins(graph_manager.getComponentHisto());
-			distance_slider.setBins(graph_manager.getHisto(Snappy.DISTANCE_BINS));
+//			component_slider.setBins(graph_manager.getComponentHisto());
+//			distance_slider.setBins(graph_manager.getHisto(Snappy.DISTANCE_BINS));
 
 			//
-			graph_layouts = new ArrayList<GraphLayout>();
-			int component_count = graph_manager.countComponents();
-			for( TopoTree.TopoTreeNode node : tt_control.m_tt.level_lookup.get(tt_control.getSelLevel())) {
-				
-				if(node.num_points > tt_control.getIgnoreComponentSize() )
-					graph_layouts.add(new GraphLayout(node,LayoutType.SUMMARY));
+//			graph_layouts = new ArrayList<GraphLayout>();
+//			int component_count = graph_manager.countComponents();
+			
+			ArrayList<TopoTreeNode> sel_nodes = new ArrayList<TopoTreeNode>(); 
+			for (ArrayList<TopoTreeNode> nodes : tt_control.m_tt.level_lookup) {
+				for (TopoTreeNode node : nodes) {					
+					if(node.num_points > tt_control.getIgnoreComponentSize() 
+							&& node.selected ) {
+
+						sel_nodes.add( node );
+					}
+				}
 			}
+
+			TopoTreeNode[] nodes = null;
+			
+			if( sel_nodes.size() > 0 ) {
+				nodes = new TopoTreeNode[sel_nodes.size()];
+				int k = 0;
+				for( TopoTreeNode node : sel_nodes ) {
+					nodes[k]=node;
+					k++;
+				}
+			}
+			for( TopoTreeSelectionListener ttselListener : ttselListeners ) {
+				
+				ttselListener.selectionChanged(nodes, null);
+			}
+			
 //			for( int component = 0; component < component_count; component++ ) {
 //				
 ////				System.out.println("Component Size = " + graph_manager.getSubComponents().get(component).size() );
@@ -480,9 +599,9 @@ public class Snappy extends JFrame implements ChangeListener {
 //				if( graph_manager.getSubComponents().get(component).size() > tt_control.getIgnoreComponenetSize() )
 //					graph_layouts.add(new GraphLayout(graph_manager,component,LayoutType.SUMMARY));
 //			}
-			graph_drawer.setRectangles(graph_layouts);
-			graph_drawer.packup();
-			graph_drawer.redraw();
+//			graph_drawer.setRectangles(graph_layouts);
+//			graph_drawer.packup();
+//			graph_drawer.redraw();
 		}
 	}
 }
