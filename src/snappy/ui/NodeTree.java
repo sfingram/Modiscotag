@@ -63,7 +63,7 @@ public class NodeTree extends JPanel implements TopoTreeSelectionListener,
 		this.setBackground(Color.white);
 		
 		JLabel title_label = new JLabel("Component List");
-		title_label.setForeground(PrettyColors.Grey);
+		title_label.setForeground(PrettyColors.DarkGrey);
 		title_label.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
 		this.add(title_label,"North");
 		

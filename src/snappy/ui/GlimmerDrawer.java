@@ -189,7 +189,7 @@ public class GlimmerDrawer extends JPanel implements TagChangeListener,
 		});
 		
 		title_label = new JLabel("MDS Scatterplot");
-		title_label.setForeground(PrettyColors.Grey);
+		title_label.setForeground(PrettyColors.DarkGrey);
 
 		
 //		draw_edges_box = new JCheckBox( "Draw Selected Edges" );

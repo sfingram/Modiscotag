@@ -17,6 +17,7 @@ public class PrettyColors {
 	public static Color Grey = new Color(145,144,144);
 	public static Color Gold = new Color(199,197,43);
 	public static Color Teal = new Color(5,199,215);
+	public static Color DarkGrey = new Color(64,64,64);
 	public static Color[] PrettyColor = {Blue,Orange,Green,Red,Purple,Brown,Pink,Grey,Gold,Teal};
 	
 	public static Color colorFromInt( int color_index ) {

@@ -4,6 +4,8 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.event.ComponentEvent;
 import java.awt.event.ComponentListener;
+import java.awt.event.FocusEvent;
+import java.awt.event.FocusListener;
 import java.util.ArrayList;
 
 import javax.swing.SwingUtilities;
@@ -41,6 +43,7 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 	static final int POWERS_OF_TWO = 7;
 
 	static final int HIST_WIDTH = 50;
+	static final int HIST_SCALE_WIDTH = 50;
 
 	static final int PRUNER_HEIGHT = 30;
 
@@ -164,6 +167,21 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 		compon_changed = new Object();
 		hilight_changed = new Object();
 		select_changed = new Object();
+		
+		this.addFocusListener(new FocusListener() {
+			
+			@Override
+			public void focusLost(FocusEvent e) {
+
+				redraw();
+			}
+			
+			@Override
+			public void focusGained(FocusEvent e) {
+			
+				redraw();
+			}
+		});
 	}
 
 	public void addTopoTreeSelectionListener(TopoTreeSelectionListener ttsl) {
@@ -225,25 +243,66 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 		noLoop();
 		this.setPreferredSize(new Dimension(PREFERRED_WIDTH, PREFERRED_HEIGHT));
 	}
+	
+	
+	void roundrect(int x, int y, int w, int h, int r) {
 
+		 int  ax, ay, hr;
+
+		 ax=x+w-1;
+		 ay=y+h-1;
+		 hr = r/2;
+
+		 rect(x, y, w, h);
+		 arc(x, y, r, r, radians(180.f), radians(270.f));
+		 arc(ax, y, r,r, radians(270.f), radians(360.f));
+		 arc(x, ay, r,r, radians(90.f), radians(180.f));
+		 arc(ax, ay, r,r, radians(0.f), radians(90.f));
+		 rect(x, y-hr, w, hr);
+		 rect(x-hr, y, hr, h);
+		 rect(x, y+h, w, hr);
+		 rect(x+w,y,hr, h);
+	}
+	
 	public void draw() {
 
 		background(255);
 
+		
+//		rect(0,0,HIST_SCALE_WIDTH,getHeight()-PRUNER_HEIGHT);
+		
 		// break up the scene into levels (at which the tree will slice things
 		// up)
 
 		level_size = (int) Math.round(((float) getHeight() - PRUNER_HEIGHT)
 				/ (levels + 1.f));
 
+		// draw the scale 
+		
+		fill(0);
+		stroke(0);
+		
+		line(5,level_size,5 + 1*HIST_SCALE_WIDTH/3,level_size);
+		line(5,level_size*levels,5 + 1*HIST_SCALE_WIDTH/3,level_size*levels);
+		text("1.0", 10 + 1*HIST_SCALE_WIDTH/3,level_size);
+		text("0.0", 10 + 1*HIST_SCALE_WIDTH/3,level_size*levels);
+		
+		line(5 + HIST_SCALE_WIDTH/6,level_size,5 + HIST_SCALE_WIDTH/6,level_size*levels);
+		
+		rotate(-PI/2.f);
+		String scale_title = "Distance Threshold"; 
+		text(scale_title,-(level_size*levels + level_size)/2 - textWidth(scale_title)/2, 5 + 2*HIST_SCALE_WIDTH/3 );
+		rotate(PI/2.f);
+		
 		// draw the levels
 
 		stroke(128 + 64 + 32);
 
 		for (int i = 0; i < levels; i++) {
 
+
 			int y = level_size + i * level_size;
-			line(0, y, getWidth() - HIST_WIDTH, y);
+			line(HIST_SCALE_WIDTH, y, getWidth() - HIST_WIDTH, y);
 		}
 
 		// slice up the top level
@@ -254,14 +313,14 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 			if (ttn.num_points >= ignore_component_size)
 				topsize += ttn.num_points;
 		}
-		int left = BORDER_SIZE;
+		int left = BORDER_SIZE+HIST_SCALE_WIDTH;
 		int right = left;
 		for (TopoTreeNode ttn : m_tt.roots) {
 
 			if (ttn.num_points >= ignore_component_size) {
 
 				right += (int) Math
-						.round(((getWidth() - HIST_WIDTH) - 2 * BORDER_SIZE)
+						.round(((getWidth() - HIST_WIDTH - HIST_SCALE_WIDTH) - 2 * BORDER_SIZE)
 								* ((float) ttn.num_points) / ((float) topsize));
 				drawNode(ttn, left, right, 0, -1, -1, true);
 				left = right;
@@ -319,11 +378,14 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 
 		// draw the pruner control
 
+		noStroke();
+		fill(64);
+		rect(0,getHeight() - PRUNER_HEIGHT - 15,getWidth(),PRUNER_HEIGHT+15);
+		
 		fill(157, 106, 94);
-		stroke(255);
-		strokeWeight(5.f);
+		noStroke();
 
-		int prune_bin_width = (getWidth() - HIST_WIDTH) / POWERS_OF_TWO;
+		int prune_bin_width = (getWidth()) / POWERS_OF_TWO;
 		for (int i = 0; i < POWERS_OF_TWO; i++) {
 
 			if (i > sel_prune) {
@@ -333,19 +395,23 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 				fill(145, 144, 144);
 				stroke(255);
 			} else if (i == sel_prune) {
-				fill(145, 144, 144);
+				
+				fill(PrettyColors.Red.getRed(), PrettyColors.Red.getGreen(), PrettyColors.Red.getBlue());
 				stroke(5, 199, 215);
 			}
 
-			rect(i * prune_bin_width, getHeight() - PRUNER_HEIGHT,
-					prune_bin_width-5, getHeight()-5);
+			noStroke();
+//			rect(i * prune_bin_width, getHeight() - PRUNER_HEIGHT,
+//					prune_bin_width-5, getHeight()-5);
+			roundrect(i * prune_bin_width + 10, getHeight() - PRUNER_HEIGHT-5,
+					prune_bin_width-20, PRUNER_HEIGHT-10,10);
 			
 			fill(255);
 			String str = "" + ((int) Math.pow(2, i));
 			text(str, i * prune_bin_width
 					+ (prune_bin_width / 2 - textWidth(str)), getHeight()
 					- PRUNER_HEIGHT
-					+ (PRUNER_HEIGHT / 2 + (textAscent() + textDescent()) / 2));
+					+ (PRUNER_HEIGHT / 2 - (textAscent() + textDescent())/2 ));
 
 			fill(0);
 			stroke(0);
@@ -353,7 +419,7 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 			int rad = SEL_NODE_SIZE + (int)Math.round(SEL_NODE_SIZE * Math.log(((int) Math.pow(2, i))));
 			ellipse(i * prune_bin_width
 					+ (prune_bin_width / 2 - textWidth(str)) - rad - 2, getHeight()
-					- PRUNER_HEIGHT
+					- PRUNER_HEIGHT - 10
 					+ (PRUNER_HEIGHT / 2 + (textAscent() + textDescent()) / 2) - rad,rad,rad);
 			strokeWeight(5.f);
 		}

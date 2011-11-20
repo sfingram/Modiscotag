@@ -563,7 +563,7 @@ public class Snappy extends JFrame implements ChangeListener {
 			html_panel_holder = new JPanel();
 			html_panel_holder.setLayout(new BorderLayout(5, 5));
 			JLabel html_panel_title = new JLabel("Item Viewer");
-			html_panel_title.setForeground(PrettyColors.Grey);
+			html_panel_title.setForeground(PrettyColors.DarkGrey);
 			html_panel_holder.setBackground(Color.white);
 			html_panel_holder.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 1, 1, 1, PrettyColors.Grey), BorderFactory.createEmptyBorder(5, 5, 5, 5)));
 				
@@ -627,7 +627,7 @@ public class Snappy extends JFrame implements ChangeListener {
 			}
 		};
 		tt_panel_title = new JLabel("DISconnected COmpontent Tree");
-		tt_panel_title.setForeground(PrettyColors.Grey);
+		tt_panel_title.setForeground(PrettyColors.DarkGrey);
 		tt_panel.setBackground(Color.white);
 		tt_panel.add(tt_panel_title);
 		tt_panel.add(tt_control);
