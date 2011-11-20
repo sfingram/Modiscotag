@@ -1,19 +1,18 @@
 package snappy.ui;
 
 import java.awt.BorderLayout;
-import java.awt.Dimension;
-import java.awt.GridLayout;
-import java.awt.ScrollPane;
-import java.awt.event.AdjustmentEvent;
-import java.awt.event.AdjustmentListener;
+import java.awt.Color;
+import java.awt.Graphics;
+import java.awt.Insets;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
-import java.util.ArrayList;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
+import javax.swing.BorderFactory;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JScrollPane;
-import javax.swing.SwingUtilities;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
@@ -23,13 +22,18 @@ import snappy.data.FeatureList;
 import snappy.data.NZData;
 import snappy.data.SparseReader;
 import snappy.graph.EdgeIntersectionLabeller;
-import snappy.graph.GraphLayout;
+import snappy.graph.GlimmerLayout;
 import snappy.graph.GraphManager;
 import snappy.graph.NodeLabeller;
 import snappy.graph.SimpleNodeLabeller;
-import snappy.graph.GraphLayout.LayoutType;
+import snappy.graph.TagTable;
 import snappy.graph.TopoTree;
-import snappy.graph.TopoTreeNode;
+
+import org.lobobrowser.html.gui.*;
+import org.lobobrowser.html.test.*;
+
+//import chrriis.dj.nativeswing.swtimpl.NativeInterface;
+//import chrriis.dj.nativeswing.swtimpl.components.JWebBrowser; 
 
 public class Snappy extends JFrame implements ChangeListener {
 
@@ -37,7 +41,7 @@ public class Snappy extends JFrame implements ChangeListener {
 	 * 
 	 */
 	private static final long serialVersionUID = -6484320090318536140L;
-	public static String VERSION_STRING = "0.0.3";	// updated after every commit
+	public static String VERSION_STRING = "0.0.4";	// updated after every commit
 	public static int DISTANCE_BINS 	= 25;		// how many bins between 0 ... 1
 	
 	int default_component_bin = 1;
@@ -48,21 +52,33 @@ public class Snappy extends JFrame implements ChangeListener {
 	String nz_feature_label_filename = "";
 	String html_prefix_name = "";
 	String html_listname = "";
+	String tag_filename = "";
 	
 	float[] current_histo = null;			// current state of the distance histogram
 	HistSlider component_slider = null;		// slider that controls which components we see
 	HistSlider distance_slider  = null;		// slider that controls which distance we permit in the graph
 	TopoTreeControl tt_control = null;		// draws the topological component tree
 	SparseReader sparse_reader  = null;		// reads the distance data
+	TagControl tag_control 		= null;		// tag widget
 	DistanceFunction distance_function = null;
 	NZData nz_data 					   = null;
 
+	JPanel tt_panel = null;
+	JLabel tt_panel_title = null;
 	GraphManager graph_manager = null;		
 	TopoTree topo_tree		   = null;
+	TagTable tag_table 		   = null;
 	float initial_cutoff_value = 1.f;
 //	GraphDrawer graph_drawer = null;
 	NodeTree node_tree_control = null;
 	HtmlDispatch html_dispatch = null;
+	HtmlPanel html_panel = null;
+	JPanel html_panel_holder = null;
+	SimpleHtmlRendererContext renderContext = null;
+	GlimmerLayout glimmer_layout = null;
+	GlimmerDrawer glimmer_drawer = null;
+	
+//	JWebBrowser webBrowser = null;
 	
 //	ArrayList<GraphLayout> graph_layouts = null;
 	
@@ -72,14 +88,99 @@ public class Snappy extends JFrame implements ChangeListener {
 	FeatureList point_feature_list = null;
 	FeatureList edge_feature_list = null;
 	NodeLabeller node_labeller = null;
-	
-	ArrayList<TopoTreeSelectionListener> ttselListeners = null;
-	public void addTopoTreeSelectionListener( TopoTreeSelectionListener ttsl ) {
 		
-		this.ttselListeners.add(ttsl);
-	}
-	
+	public class SnappyPanel extends JPanel {
+		
+		/**
+		 * 
+		 */
+		private static final long serialVersionUID = 4961085365793328208L;
 
+		public SnappyPanel() {
+			
+			super();
+			setBackground(Color.WHITE);
+		}
+		
+		public void doLayout() {
+			
+            int width = getWidth();
+            int height = getHeight();
+            Insets insets = getInsets();
+            int myWidth  = ((width - insets.left) - insets.right);
+            int myHeight = (height - insets.top) - insets.bottom;
+            
+			if( ! is_low_level_enabled ) {
+				tt_panel.setBounds(	insets.left, 
+						insets.top + myHeight/2, 
+						3*myWidth/4, 
+						myHeight/2);
+	            node_tree_control.setBounds(	insets.left, 
+						insets.top, 
+						myWidth, 
+						myHeight/2);
+				tag_control.setBounds( insets.left + 3*myWidth/4, 
+						insets.top + myHeight/2, 
+						myWidth/4, 
+						myHeight/2 );
+				glimmer_drawer.setBounds(insets.left + myWidth, insets.top,myWidth,myHeight );
+//	            tt_control.setBounds(	insets.left, 
+//						insets.top + myHeight/2, 
+//						3*myWidth/4, 
+//						myHeight/2);
+//	            node_tree_control.setBounds(	insets.left, 
+//						insets.top, 
+//						myWidth, 
+//						myHeight/2);
+//				tag_control.setBounds( insets.left + 3*myWidth/4, 
+//						insets.top + myHeight/2, 
+//						myWidth/4, 
+//						myHeight/2 );
+//				glimmer_drawer.setBounds(insets.left + myWidth, insets.top,myWidth,myHeight );
+			}
+			else {
+				
+				int tag_width = 300;
+				int non_tt_width = tag_width + myHeight/2;
+				
+				tt_panel.setBounds(	insets.left, 
+						insets.top, 
+						myWidth - non_tt_width, 
+						myHeight/2);
+				tag_control.setBounds( insets.left + (myWidth - non_tt_width), 
+						insets.top , 
+						tag_width, 
+						myHeight/2 );
+				glimmer_drawer.setBounds(insets.left + (myWidth - myHeight/2), insets.top,myHeight/2,myHeight/2 );
+				
+	            node_tree_control.setBounds(	insets.left, 
+						insets.top + myHeight/2, 
+						myWidth, 
+						myHeight/4);
+	            html_panel_holder.setBounds(	insets.left, 
+						insets.top + myHeight/4 + myHeight/2, 
+						myWidth, 
+						myHeight/4);				
+//	            tt_control.setBounds(	insets.left, 
+//						insets.top + myHeight/2, 
+//						3*myWidth/4, 
+//						myHeight/2);
+//	            node_tree_control.setBounds(	insets.left, 
+//						insets.top, 
+//						myWidth, 
+//						myHeight/4);
+//	            html_panel.setBounds(	insets.left, 
+//						insets.top + myHeight/4, 
+//						myWidth, 
+//						myHeight/4);				
+//				tag_control.setBounds( insets.left + 3*myWidth/4, 
+//						insets.top + myHeight/2, 
+//						myWidth/4, 
+//						myHeight/2 );
+//				glimmer_drawer.setBounds(insets.left + myWidth, insets.top,myWidth,myHeight );
+			}
+		}
+	}
 	
 	public void parseArgs(String[] args) {
 				
@@ -89,6 +190,7 @@ public class Snappy extends JFrame implements ChangeListener {
 		boolean inPF 	= false;	// 'P' next argument is for point label file
 		boolean inNZF 	= false;	// 'Z' next argument is for nonzero label file
 		boolean inHTML  = false;    // 'H' next argument is for html url directory
+		boolean inTAG   = false;    // 'T' next argument is for tag file
 		
 		int arg_num = 0; 
 		
@@ -100,7 +202,7 @@ public class Snappy extends JFrame implements ChangeListener {
 
 				// the next argument should *not* be a dash if we're expecting input
 				
-				if( inNZ || inDM || inIND || inHTML ) {
+				if( inNZ || inDM || inIND || inHTML || inTAG ) {
 					
 					System.out.println("PARSE ERROR: Trouble parsing argument \"" + arg + "\"");
 					System.exit(0);
@@ -183,6 +285,18 @@ public class Snappy extends JFrame implements ChangeListener {
 						nz_feature_label_filename = arg.substring(2);
 					}
 				}
+				else if( arg.charAt(1) == 'T' ) {
+					
+					inTAG = true;
+					if( arg.length() == 2 ) {
+						
+						inTAG = true;
+					}
+					else {
+						
+						tag_filename = arg.substring(2);
+					}
+				}
 				else if( arg.charAt(1) == 'H' ) {
 					
 					inHTML = true; 	// we are using html lookups
@@ -241,6 +355,12 @@ public class Snappy extends JFrame implements ChangeListener {
 				inNZF = false;
 			}			
 			
+			else if( inTAG ) {
+				
+				tag_filename = arg;
+				inTAG = false;
+			}			
+			
 			else if( inHTML ) {
 				
 				if( arg_num == 0) {				// first argument is the exec prefix
@@ -259,7 +379,7 @@ public class Snappy extends JFrame implements ChangeListener {
 		
 		// check if we never got an expected argument
 		
-		if( inNZ || inDM || inIND || inPF || inNZF || inHTML ) {
+		if( inNZ || inDM || inIND || inPF || inNZF || inHTML || inTAG ) {
 			
 			System.err.println("Error parsing input arguments.");
 			System.exit(0);
@@ -268,7 +388,7 @@ public class Snappy extends JFrame implements ChangeListener {
 	
 	public Snappy( String[] args ) {
 		
-		super("Snappy");
+		super("Mo Disco");
 		
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		
@@ -339,7 +459,8 @@ public class Snappy extends JFrame implements ChangeListener {
 		while( System.currentTimeMillis() - start_time < 5000L && !graph_manager.updateGraph() );
 		graph_manager.sortEdges();
 		System.out.println("done.");
-
+		glimmer_layout = new GlimmerLayout( graph_manager );
+		
 		// compute the topo tree
 		
 		System.out.print("Computing TopoTree...");
@@ -349,10 +470,16 @@ public class Snappy extends JFrame implements ChangeListener {
 			mylevels[DISTANCE_BINS-i] = ((float)i) / ((float)DISTANCE_BINS);
 		}
 		topo_tree = new TopoTree(graph_manager, mylevels);
-		ttselListeners = new ArrayList<TopoTreeSelectionListener>();
 		System.out.println("done.");
 		graph_manager.setCutoff(1.f);
+		tag_table = new TagTable(topo_tree);
+		
+		// load up the tag file here
 
+		if( tag_filename.length() > 0 ) {
+			
+			tag_table.loadTagFile(tag_filename);
+		}
 		
 		// perform component count and component layout
 		
@@ -392,6 +519,8 @@ public class Snappy extends JFrame implements ChangeListener {
 		
 		tt_control = new TopoTreeControl(topo_tree,graph_manager.getHisto(Snappy.DISTANCE_BINS));
 		
+		tag_control = new TagControl(tag_table, tt_control );
+
 //		int[] trashhisto = graph_manager.getHisto(Snappy.DISTANCE_BINS);
 		current_histo = new float[Snappy.DISTANCE_BINS];
 		for(int i = 0; i < Snappy.DISTANCE_BINS; i++ ) {
@@ -417,17 +546,43 @@ public class Snappy extends JFrame implements ChangeListener {
 			node_labeller = new EdgeIntersectionLabeller(graph_manager, edge_feature_list, nz_data);
 		}
 		node_tree_control = new NodeTree( node_labeller );
-		this.addTopoTreeSelectionListener(node_tree_control);
-		tt_control.addTopoTreeHilightListener(node_tree_control);
-		node_tree_control.addTopoTreeHilightListener(tt_control);
+		glimmer_drawer = new GlimmerDrawer(glimmer_layout, topo_tree, tag_table);
+//		this.addTopoTreeSelectionListener(node_tree_control);
+		tt_control.addTopoTreeSelectionListener( node_tree_control );
+		node_tree_control.addTopoTreeSelectionListener(tt_control);
+		node_tree_control.addChangeListener(tt_control);
+		tag_table.addTagChangeListener(node_tree_control);
+		tag_table.addTagChangeListener(glimmer_drawer);
+		node_tree_control.addTopoTreeSelectionListener(glimmer_drawer);
 		
 		// load html data
 		
 		if( is_low_level_enabled ) {
 			
+			
+			html_panel_holder = new JPanel();
+			html_panel_holder.setLayout(new BorderLayout(5, 5));
+			JLabel html_panel_title = new JLabel("Item Viewer");
+			html_panel_title.setForeground(PrettyColors.Grey);
+			html_panel_holder.setBackground(Color.white);
+			html_panel_holder.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 1, 1, 1, PrettyColors.Grey), BorderFactory.createEmptyBorder(5, 5, 5, 5)));
+				
+			html_panel = new HtmlPanel();
+			html_panel.setBorder(BorderFactory.createLineBorder(Color.BLACK));
+			renderContext = new SimpleHtmlRendererContext(html_panel, new SimpleUserAgentContext());
+			Logger.getLogger("").setLevel(Level.OFF);
+			html_panel.setHtml("<html></html>", "", renderContext);
+//			webBrowser = new JWebBrowser();
+//			webBrowser.setBarsVisible(false);
+//			webBrowser.setStatusBarVisible(false);
+//			webBrowser.setHTMLContent("<html>LOW LEVEL VIEWER</html>");
 			html_dispatch = new HtmlDispatch(	node_tree_control.tree, 
 												html_prefix_name, 
-												HtmlDispatch.loadHTMLList(html_listname));
+												HtmlDispatch.loadHTMLList(html_listname),html_panel,renderContext);			
+			node_tree_control.addKeyListener(html_dispatch);
+			
+			html_panel_holder.add(html_panel_title,"North");
+			html_panel_holder.add(html_panel,"Center");			
 		}
 		
 //		graph_drawer = new GraphDrawer( node_labeller );
@@ -442,8 +597,44 @@ public class Snappy extends JFrame implements ChangeListener {
 //		//slider_panels.add(component_slider);
 //		slider_panels.add(tt_control);
 		
-		this.getContentPane().setLayout(new BorderLayout(5,5));		
-		this.getContentPane().add( tt_control, "East");
+		SnappyPanel snappyPanel = new SnappyPanel();
+		snappyPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+		
+		tt_panel = new JPanel() {
+			
+			/**
+			 * 
+			 */
+			private static final long serialVersionUID = 1L;
+
+			public void doLayout() {
+				
+				int width = getWidth();
+				int height = getHeight();
+				Insets insets = getInsets();
+				int myWidth = (width - insets.left) - insets.right;
+				int myHeight = (height - insets.top) - insets.bottom;
+				
+				int title_height = tt_panel_title.getPreferredSize().height;
+
+				tt_panel_title.setBounds(insets.left, insets.top, myWidth, title_height);
+				tt_control.setBounds(insets.left, insets.top + title_height + 5, myWidth, myHeight - title_height - 5 );
+			}
+			
+			public void paintComponent( Graphics g ) {
+				
+				tt_control.redraw();
+			}
+		};
+		tt_panel_title = new JLabel("DISconnected COmpontent Tree");
+		tt_panel_title.setForeground(PrettyColors.Grey);
+		tt_panel.setBackground(Color.white);
+		tt_panel.add(tt_panel_title);
+		tt_panel.add(tt_control);
+		tt_panel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(1, 1, 0, 1, PrettyColors.Grey),BorderFactory.createEmptyBorder(5, 5, 5, 5)));
+		
+		snappyPanel.add( tt_panel );
+		snappyPanel.add( glimmer_drawer );
 		
 		//JScrollPane scroll_pane = new JScrollPane(graph_drawer);
 //		ScrollPane scroll_pane2 = new ScrollPane(ScrollPane.SCROLLBARS_AS_NEEDED);
@@ -458,12 +649,13 @@ public class Snappy extends JFrame implements ChangeListener {
 //			}} );
 //		this.getContentPane().add( scroll_pane2, "Center" );
 
-		this.getContentPane().add(node_tree_control, "West");
-		for( TopoTreeSelectionListener ttselListener : ttselListeners ) {
-			
-			ttselListener.selectionChanged(null, null);
+		snappyPanel.add(node_tree_control);
+		snappyPanel.add(tag_control);
+		if( is_low_level_enabled ) {
+//			snappyPanel.add(webBrowser);
+			snappyPanel.add(html_panel_holder);
 		}
-
+		this.getContentPane().add(snappyPanel);
 		
 		// init the processing apps
 		
@@ -481,7 +673,8 @@ public class Snappy extends JFrame implements ChangeListener {
 	}
 	
 	public static void main( final String[] args ) {
-
+		
+//		NativeInterface.open();  
         javax.swing.SwingUtilities.invokeLater(new Runnable() {
         	Snappy snappy = null;
             public void run() {
@@ -489,119 +682,11 @@ public class Snappy extends JFrame implements ChangeListener {
             	snappy = new Snappy(args);
             }
         } );
+//        NativeInterface.runEventPump(); 
 	}
 
 	@Override
 	public void stateChanged(ChangeEvent arg0) {
-
-		if( arg0.getSource() == tt_control.hilight_changed ) {
-
-		    SwingUtilities.invokeLater(new Runnable() {
-		        public void run() {
-		          // Set the preferred size so that the layout managers can handle it
-//					graph_drawer.redraw();
-		        }
-		      });
-		}
-		if( arg0.getSource() == tt_control.cutoff_changed ) {
-			
-//			graph_manager.setCutoff(current_histo[(current_histo.length-tt_control.getSelLevel())-1]);
-		}
-		if( arg0.getSource() == tt_control.compon_changed || arg0.getSource() == tt_control.select_changed ) {
-
-//			graph_layouts.clear();
-			ArrayList<TopoTreeNode> sel_nodes = new ArrayList<TopoTreeNode>(); 
-			for (ArrayList<TopoTreeNode> nodes : tt_control.m_tt.level_lookup) {
-				for (TopoTreeNode node : nodes) {					
-					if(node.num_points > tt_control.getIgnoreComponentSize() 
-							&& node.selected ) {
-
-						sel_nodes.add( node );
-					}
-				}
-			}
-			
-			TopoTreeNode[] nodes = null;
-			
-			if( sel_nodes.size() > 0 ) {
-				nodes = new TopoTreeNode[sel_nodes.size()];
-				int k = 0;
-				for( TopoTreeNode node : sel_nodes ) {
-					nodes[k]=node;
-					k++;
-				}
-			}
-			for( TopoTreeSelectionListener ttselListener : ttselListeners ) {
-				
-				ttselListener.selectionChanged(nodes, null);
-			}
-			
-//			for( int component = 0; component < graph_manager.getSubComponents().size(); component++ ) {
-//				
-//				if( graph_manager.getSubComponents().get(component).size() > tt_control.getIgnoreComponentSize() )
-//					graph_layouts.add(new GraphLayout(graph_manager,component,LayoutType.SUMMARY));
-//			}
-			
-			
-//			
-//			graph_drawer.setRectangles(graph_layouts);
-//			graph_drawer.packup();
-//			graph_drawer.redraw();
-		}
-		if( arg0.getSource() == graph_manager ) {
-			
-//			graph_layouts.clear();
-//			for( int component = 0; component < graph_manager.getSubComponents().size(); component++ ) {
-//				
-//				if( graph_manager.getSubComponents().get(component).size() > component_slider.cutoff )
-//					graph_layouts.add(new GraphLayout(graph_manager,component,LayoutType.SUMMARY));
-//			}
-			
-			// the graph has changed, update the controls
-			
-//			component_slider.setBins(graph_manager.getComponentHisto());
-//			distance_slider.setBins(graph_manager.getHisto(Snappy.DISTANCE_BINS));
-
-			//
-//			graph_layouts = new ArrayList<GraphLayout>();
-//			int component_count = graph_manager.countComponents();
-			
-			ArrayList<TopoTreeNode> sel_nodes = new ArrayList<TopoTreeNode>(); 
-			for (ArrayList<TopoTreeNode> nodes : tt_control.m_tt.level_lookup) {
-				for (TopoTreeNode node : nodes) {					
-					if(node.num_points > tt_control.getIgnoreComponentSize() 
-							&& node.selected ) {
-
-						sel_nodes.add( node );
-					}
-				}
-			}
-
-			TopoTreeNode[] nodes = null;
-			
-			if( sel_nodes.size() > 0 ) {
-				nodes = new TopoTreeNode[sel_nodes.size()];
-				int k = 0;
-				for( TopoTreeNode node : sel_nodes ) {
-					nodes[k]=node;
-					k++;
-				}
-			}
-			for( TopoTreeSelectionListener ttselListener : ttselListeners ) {
-				
-				ttselListener.selectionChanged(nodes, null);
-			}
-			
-//			for( int component = 0; component < component_count; component++ ) {
-//				
-////				System.out.println("Component Size = " + graph_manager.getSubComponents().get(component).size() );
-//				//if( graph_manager.getSubComponents().get(component).size() > component_slider.cutoff )
-//				if( graph_manager.getSubComponents().get(component).size() > tt_control.getIgnoreComponenetSize() )
-//					graph_layouts.add(new GraphLayout(graph_manager,component,LayoutType.SUMMARY));
-//			}
-//			graph_drawer.setRectangles(graph_layouts);
-//			graph_drawer.packup();
-//			graph_drawer.redraw();
-		}
+		
 	}
 }

@@ -24,7 +24,7 @@ public class GraphManager {
 	
 	int componentCount = 0;				// the number of connected components
 	
-	ArrayList<ArrayList<SimpleEdge>> nodeEdgeLookup = null; // maintains a list of edges for each node
+	public ArrayList<ArrayList<SimpleEdge>> nodeEdgeLookup = null; // maintains a list of edges for each node
 //	ArrayList<TreeSet<SimpleEdge>> nodeEdgeLookup = null; // maintains a list of edges for each node
 	ArrayList<ArrayList<Integer>> subComponents = null;  // maintains a list of components and their membership
 	

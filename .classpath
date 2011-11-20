@@ -3,5 +3,7 @@
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
 	<classpathentry kind="lib" path="/Users/sfingram/Documents/core.jar"/>
+	<classpathentry kind="lib" path="/Users/sfingram/Downloads/cobra/cobra-0.98.4/lib/cobra.jar"/>
+	<classpathentry kind="lib" path="/Users/sfingram/Downloads/cobra/cobra-0.98.4/lib/js.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

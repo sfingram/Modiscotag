@@ -10,7 +10,7 @@ public class TopoTree {
 	public ArrayList<TopoTreeNode> roots = null; 	// root nodes to the tree (usually just one)
 	public HashMap<Integer,Integer> component_sizes = null;
 	
-	ArrayList<TopoTreeNode[]> tree_lookup;			// tree lookup that maps node numbers to their current node
+	public ArrayList<TopoTreeNode[]> tree_lookup;			// tree lookup that maps node numbers to their current node
 	public ArrayList<ArrayList<TopoTreeNode>> level_lookup;
 	
 	//
@@ -80,6 +80,17 @@ public class TopoTree {
 					tree_lookup.get(i)[sub_components.get(j).get(k)] = ttn;
 				}
 				level_lookup.get(i).add(ttn);
+			}
+		}
+		
+		// mark and link up to nonduplicate topo nodes
+		for(ArrayList<TopoTreeNode> nodes : level_lookup) {
+			
+			for( TopoTreeNode node : nodes ) {
+				
+				node.setSameAsChild();
+				node.setDifferentParent();
+				node.setDifferentChildren();
 			}
 		}
 	}
