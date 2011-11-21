@@ -50,6 +50,7 @@ public class TagControl extends JPanel implements ActionListener, TagChangeListe
 	File m_chosenFile = null;
 	JLabel tag_label = null;
 	JLabel item_label = null;
+	JLabel export_label = null;
 	JScrollPane scroll_pane = null;
 	JLabel title_label = null;
 	
@@ -158,15 +159,17 @@ public class TagControl extends JPanel implements ActionListener, TagChangeListe
 		newTagField.setBounds(insets.left, insets.top + title_label.getPreferredSize().height + 5, myWidth, newTagField.getPreferredSize().height);
 		
 		// get the maximum size of the button panel
-		int bpanel_height = tag_label.getPreferredSize().height + item_label.getPreferredSize().height +
+		int bpanel_height = tag_label.getPreferredSize().height + item_label.getPreferredSize().height + 
+						export_label.getPreferredSize().height +
 						up_button.getPreferredSize().height + kill_button.getPreferredSize().height 
 						+ add_button.getPreferredSize().height + rmv_button.getPreferredSize().height
-						+ save_button.getPreferredSize().height + newTagButton.getPreferredSize().height + 5 * 7; 
+						+ save_button.getPreferredSize().height + newTagButton.getPreferredSize().height + 5 * 8; 
 		
 		int indent_amount = 20;
 		ArrayList<Integer> width_list = new ArrayList<Integer>();
 		width_list.add(tag_label.getPreferredSize().width);
 		width_list.add(item_label.getPreferredSize().width);
+		width_list.add(export_label.getPreferredSize().width);
 		width_list.add(indent_amount+up_button.getPreferredSize().width);
 		width_list.add(indent_amount+kill_button.getPreferredSize().width);
 		width_list.add(indent_amount+add_button.getPreferredSize().width);
@@ -214,9 +217,14 @@ public class TagControl extends JPanel implements ActionListener, TagChangeListe
 				v_offs, 
 				rmv_button.getPreferredSize().width, rmv_button.getPreferredSize().height);
 		v_offs += rmv_button.getPreferredSize().height + 5;
-		save_button.setBounds(insets.left + list_width + 5, 
+		export_label.setBounds(insets.left + list_width + 5, 
 				v_offs, 
-				bpanel_width, save_button.getPreferredSize().height);		
+				export_label.getPreferredSize().width, export_label.getPreferredSize().height);		
+		v_offs += export_label.getPreferredSize().height + 5;
+		save_button.setBounds(insets.left + list_width + 5 + indent_amount, 
+				v_offs, 
+				save_button.getPreferredSize().width, save_button.getPreferredSize().height);		
+		v_offs += save_button.getPreferredSize().height + 5;
 	}
 	
 	public Dimension getPreferredSize() {
@@ -263,6 +271,7 @@ public class TagControl extends JPanel implements ActionListener, TagChangeListe
 		save_button.addActionListener(this);
 		tag_label = new JLabel("Tags");
 		item_label = new JLabel("Items");
+		export_label = new JLabel("Export");
 		title_label = new JLabel("Tags Editor");
 		title_label.setForeground(PrettyColors.DarkGrey);
 		this.add(title_label);
@@ -276,6 +285,7 @@ public class TagControl extends JPanel implements ActionListener, TagChangeListe
 		this.add(save_button);
 		this.add(tag_label);
 		this.add(item_label);
+		this.add(export_label);
 	}
 
 

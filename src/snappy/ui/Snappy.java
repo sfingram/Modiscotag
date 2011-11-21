@@ -41,7 +41,7 @@ public class Snappy extends JFrame implements ChangeListener {
 	 * 
 	 */
 	private static final long serialVersionUID = -6484320090318536140L;
-	public static String VERSION_STRING = "0.0.4";	// updated after every commit
+	public static String VERSION_STRING = "0.0.6";	// updated after every commit
 	public static int DISTANCE_BINS 	= 25;		// how many bins between 0 ... 1
 	
 	int default_component_bin = 1;
@@ -388,7 +388,7 @@ public class Snappy extends JFrame implements ChangeListener {
 	
 	public Snappy( String[] args ) {
 		
-		super("Mo Disco");
+		super("MoDisco");
 		
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		
@@ -626,7 +626,7 @@ public class Snappy extends JFrame implements ChangeListener {
 				tt_control.redraw();
 			}
 		};
-		tt_panel_title = new JLabel("DISconnected COmpontent Tree");
+		tt_panel_title = new JLabel("Disconnected Component Tree");
 		tt_panel_title.setForeground(PrettyColors.DarkGrey);
 		tt_panel.setBackground(Color.white);
 		tt_panel.add(tt_panel_title);

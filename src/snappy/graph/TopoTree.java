@@ -13,6 +13,27 @@ public class TopoTree {
 	public ArrayList<TopoTreeNode[]> tree_lookup;			// tree lookup that maps node numbers to their current node
 	public ArrayList<ArrayList<TopoTreeNode>> level_lookup;
 	
+	public ArrayList<TopoTreeNode> getLCA( ArrayList<Integer> items ) {
+		
+		ArrayList<TopoTreeNode> nodes = new ArrayList<TopoTreeNode>();
+		
+		// calculate the LCA of these items
+		
+		for( int i = 0; i < num_levels; i++ ) {
+			
+			if( i == 0 ) {  
+				
+				// if we're on the lowest level add the nodes to the hashset
+				
+			}
+			else {
+				
+			}
+		}
+		
+		return nodes;
+	}
+	
 	//
 	// constructor takes a graph and the number of levels to tree you want to compute
 	//
