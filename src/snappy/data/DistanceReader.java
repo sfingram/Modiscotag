@@ -57,6 +57,39 @@ public class DistanceReader {
 		return null;
 		
 	}
+	
+	public static DistanceFunction readSortedSubDistanceData( Reader reader, int num_points ) {
+		
+		try{
+			
+			BufferedReader breader = new BufferedReader( reader );
+			SortedSubDistanceMatrix df = new SortedSubDistanceMatrix();			
+			
+			df.setInitialPointCount(num_points);
+			
+			String lineStr = breader.readLine();
+			
+			// count the number of fields
+			df.setColCount(lineStr.split(",").length);			
+			
+			while( lineStr != null && lineStr.length() > 0 ) {
+				
+				df.addPointData( lineStr );				
+				lineStr = breader.readLine();
+			}
+			
+			breader.close();
+			return df;
+		}
+		catch(Exception e) {
+			
+			e.printStackTrace();
+		}
+		
+		return null;
+		
+	}
+	
 	public static DistanceFunction readFullDistanceData(  Reader reader ) {
 		
 		try{

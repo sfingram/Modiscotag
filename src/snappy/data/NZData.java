@@ -99,6 +99,7 @@ public class NZData {
 	private int samplerIdx = 0;
 	private ArrayList<Integer> currSamplePoints;
 	
+	int iter_count = 0;
 	int dimensionCount = 0;
 	int pointCount  = 0;
 	
@@ -106,6 +107,30 @@ public class NZData {
 	ArrayList<TreeSet<NZEntry>> nzEntryData = null;
 	HashMap<Integer,ArrayList<NZTransposeEntry>> nzEntryTransposeData = null;
 	ArrayList<HashMap<Integer,Boolean>> edgeChecker = null;
+	
+	/*
+	 * Generates a uniformly sampled random histogram of the distance matrix with 
+	 * bin width = 1 / bin_count
+	 */
+	public int[] uniformHistogram( int bin_count, int sample_count ) {
+		
+		int[] local_bins = new int[bin_count];
+		
+		for( int i = 0; i < sample_count; i++ ) {
+			
+			int n_i = (int)Math.floor(Math.random()*pointCount);
+			int n_j = (int)Math.floor(Math.random()*pointCount);
+			if( n_i == n_j ) 
+				continue;
+			float p = pdist(n_i,n_j);
+			int n_bin_idx = Math.max((int)Math.ceil(bin_count * p)-1, 0);
+//			System.out.println("p = "+ p);
+			local_bins[n_bin_idx]++;
+		}
+		
+		
+		return local_bins;
+	}
 	
 	public NZData( ) {
 		
@@ -296,7 +321,7 @@ public class NZData {
 				
 					// compute the distance between the two points
 					float d = pdist(smallerPt, biggerPt);
-					retEdge = new SimpleEdge(smallerPt,biggerPt,d);
+					retEdge = new SimpleEdge(smallerPt,biggerPt,d/*,iter_count*/);
 					edgeChecker.get(smallerPt).put(biggerPt, true);
 				}
 				
@@ -326,6 +351,9 @@ public class NZData {
 			else {
 				
 				samplerIdx = (samplerIdx + 1) % currSamplePoints.size();
+				if( samplerIdx == 0 ) {
+					iter_count++;
+				}
 			}			
 		}
 		

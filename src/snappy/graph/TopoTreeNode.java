@@ -2,6 +2,7 @@ package snappy.graph;
 
 import java.awt.Color;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 
 public class TopoTreeNode {
@@ -12,18 +13,40 @@ public class TopoTreeNode {
 	public ArrayList<TopoTreeNode> children;
 	public ArrayList<TopoTreeNode> diffChildren;
 	public boolean hilighted;
-	public boolean selected;
 	public ArrayList<Integer> component;
 	public int x;
 	public int y;
+	public int level = 0;
 	public HashMap<Integer,Integer> tags;
 	public HashMap<Integer,Color> tag_colors;
 	public boolean isSameAsChild = false;
 	
+	public boolean containsOnlyItems( Collection<Integer> items ) {
+		
+		if( items.size() >= component.size() ) {
+			
+			return items.containsAll(component);
+		}
+		
+		return false;
+	}
+	
+	public boolean containsAnyItems( Collection<Integer> items ) {
+	
+		boolean foundAnItem = false;
+		
+		for( Integer item : items ) {
+			
+			if( component.contains(item) )
+				return true;
+		}
+		
+		return foundAnItem;
+	}
+	
 	public TopoTreeNode() {
 		
 		x = 0;
-		selected=false;
 		hilighted=false;
 		num_points = 0;
 		parent = null;

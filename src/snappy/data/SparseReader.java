@@ -82,18 +82,18 @@ public class SparseReader {
 		
 		while( (System.currentTimeMillis() - millis_start) < (5000L) && simpleEdge != null ) {
 			
-			curr_count = ( curr_count + 1 ) % chunk_count;
+//			curr_count = ( curr_count + 1 ) % chunk_count;
 			if( curr_count == 0) {
 				
-				avgs[count_idx] /= (float)chunk_count;
-				System.out.println(""+avgs[count_idx]);
-				count_idx += 1;
-				if(count_idx >= avgs.length) {
-					System.exit(0);
-				}				
+//				avgs[count_idx] /= (float)chunk_count;
+//				System.out.println(""+avgs[count_idx]);
+//				count_idx += 1;
+//				if(count_idx >= avgs.length) {
+//					System.exit(0);
+//				}				
 			}
 			
-			avgs[count_idx] = avgs[count_idx] + simpleEdge.w;
+//			avgs[count_idx] = avgs[count_idx] + simpleEdge.w;
 			simpleEdge = nzd.sampleEdge();
 			edge_count++;
 		}
@@ -104,5 +104,6 @@ public class SparseReader {
 		}
 		
 		System.out.println("Number of edges sampled = " + edge_count);
+		System.out.println("Number of points = " + nzd.pointCount );
 	}	
 }

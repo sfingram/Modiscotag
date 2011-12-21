@@ -2,6 +2,7 @@ package snappy.ui;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Insets;
 import java.io.FileNotFoundException;
@@ -41,7 +42,7 @@ public class Snappy extends JFrame implements ChangeListener {
 	 * 
 	 */
 	private static final long serialVersionUID = -6484320090318536140L;
-	public static String VERSION_STRING = "0.0.6";	// updated after every commit
+	public static String VERSION_STRING = "0.1.6";	// updated after every commit
 	public static int DISTANCE_BINS 	= 25;		// how many bins between 0 ... 1
 	
 	int default_component_bin = 1;
@@ -78,6 +79,8 @@ public class Snappy extends JFrame implements ChangeListener {
 	GlimmerLayout glimmer_layout = null;
 	GlimmerDrawer glimmer_drawer = null;
 	
+	long startup_seconds = 5000L;
+	
 //	JWebBrowser webBrowser = null;
 	
 //	ArrayList<GraphLayout> graph_layouts = null;
@@ -111,19 +114,23 @@ public class Snappy extends JFrame implements ChangeListener {
             int myHeight = (height - insets.top) - insets.bottom;
             
 			if( ! is_low_level_enabled ) {
+				int tag_width = 300;
+				int non_tt_width = tag_width + myHeight/2;
+				
 				tt_panel.setBounds(	insets.left, 
-						insets.top + myHeight/2, 
-						3*myWidth/4, 
-						myHeight/2);
-	            node_tree_control.setBounds(	insets.left, 
 						insets.top, 
+						myWidth - non_tt_width, 
+						myHeight/2);
+				tag_control.setBounds( insets.left + (myWidth - non_tt_width), 
+						insets.top , 
+						tag_width, 
+						myHeight/2 );
+				glimmer_drawer.setBounds(insets.left + (myWidth - myHeight/2), insets.top,myHeight/2,myHeight/2 );
+				
+	            node_tree_control.setBounds(	insets.left, 
+						insets.top + myHeight/2, 
 						myWidth, 
 						myHeight/2);
-				tag_control.setBounds( insets.left + 3*myWidth/4, 
-						insets.top + myHeight/2, 
-						myWidth/4, 
-						myHeight/2 );
-				glimmer_drawer.setBounds(insets.left + myWidth, insets.top,myWidth,myHeight );
 //	            tt_control.setBounds(	insets.left, 
 //						insets.top + myHeight/2, 
 //						3*myWidth/4, 
@@ -191,6 +198,7 @@ public class Snappy extends JFrame implements ChangeListener {
 		boolean inNZF 	= false;	// 'Z' next argument is for nonzero label file
 		boolean inHTML  = false;    // 'H' next argument is for html url directory
 		boolean inTAG   = false;    // 'T' next argument is for tag file
+		boolean inSEC   = false;	// 'S' next argument is a long int for millis
 		
 		int arg_num = 0; 
 		
@@ -202,7 +210,7 @@ public class Snappy extends JFrame implements ChangeListener {
 
 				// the next argument should *not* be a dash if we're expecting input
 				
-				if( inNZ || inDM || inIND || inHTML || inTAG ) {
+				if( inNZ || inDM || inIND || inHTML || inTAG || inSEC ) {
 					
 					System.out.println("PARSE ERROR: Trouble parsing argument \"" + arg + "\"");
 					System.exit(0);
@@ -297,6 +305,18 @@ public class Snappy extends JFrame implements ChangeListener {
 						tag_filename = arg.substring(2);
 					}
 				}
+				else if( arg.charAt(1) == 'S' ) {
+					
+					inSEC = true;
+					if( arg.length() == 2 ) {
+						
+						inSEC = true;
+					}
+					else {
+						
+						startup_seconds = Long.parseLong(arg.substring(2));
+					}
+				}
 				else if( arg.charAt(1) == 'H' ) {
 					
 					inHTML = true; 	// we are using html lookups
@@ -361,6 +381,12 @@ public class Snappy extends JFrame implements ChangeListener {
 				inTAG = false;
 			}			
 			
+			else if( inSEC ) {
+				
+				startup_seconds = Long.parseLong(arg);
+				inSEC = false;
+			}
+			
 			else if( inHTML ) {
 				
 				if( arg_num == 0) {				// first argument is the exec prefix
@@ -379,7 +405,7 @@ public class Snappy extends JFrame implements ChangeListener {
 		
 		// check if we never got an expected argument
 		
-		if( inNZ || inDM || inIND || inPF || inNZF || inHTML || inTAG ) {
+		if( inNZ || inDM || inIND || inPF || inNZF || inHTML || inTAG || inSEC ) {
 			
 			System.err.println("Error parsing input arguments.");
 			System.exit(0);
@@ -388,7 +414,7 @@ public class Snappy extends JFrame implements ChangeListener {
 	
 	public Snappy( String[] args ) {
 		
-		super("MoDisco");
+		super("MoDiscoTag");
 		
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		
@@ -419,6 +445,7 @@ public class Snappy extends JFrame implements ChangeListener {
 				
 				int ptCount = DistanceReader.readDistancePointSize(new FileReader( df_data_filename ));
 				distance_function = DistanceReader.readSortedDistanceData(new FileReader( df_data_filename ),ptCount);
+//				distance_function = DistanceReader.readSortedSubDistanceData(new FileReader( df_data_filename ),ptCount);
 			} catch (FileNotFoundException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -456,7 +483,11 @@ public class Snappy extends JFrame implements ChangeListener {
 		
 		System.out.print("Loading Initial Edges...");
 		long start_time = System.currentTimeMillis();
-		while( System.currentTimeMillis() - start_time < 5000L && !graph_manager.updateGraph() );
+		while( System.currentTimeMillis() - start_time < startup_seconds && !graph_manager.updateGraph() );
+		
+//		graph_manager.outputSimpleEdgesToFile("edge_data_file.txt");
+//		System.exit(0);
+		
 		graph_manager.sortEdges();
 		System.out.println("done.");
 		glimmer_layout = new GlimmerLayout( graph_manager );
@@ -518,8 +549,8 @@ public class Snappy extends JFrame implements ChangeListener {
 //		component_slider.isLog = true;
 		
 		tt_control = new TopoTreeControl(topo_tree,graph_manager.getHisto(Snappy.DISTANCE_BINS));
-		
-		tag_control = new TagControl(tag_table, tt_control );
+		tt_control.setTagTable(tag_table);
+		tag_control = new TagControl(tag_table );
 
 //		int[] trashhisto = graph_manager.getHisto(Snappy.DISTANCE_BINS);
 		current_histo = new float[Snappy.DISTANCE_BINS];
@@ -532,8 +563,6 @@ public class Snappy extends JFrame implements ChangeListener {
 		// connect the graph and the sliders
 		
 		graph_manager.addChangeListener(this);
-//		component_slider.addChangeListener(this);
-//		distance_slider.addChangeListener(this);
 		tt_control.addChangeListener(this);
 		
 		// build the graph drawing component
@@ -545,15 +574,28 @@ public class Snappy extends JFrame implements ChangeListener {
 		if( edge_feature_list!= null ) {
 			node_labeller = new EdgeIntersectionLabeller(graph_manager, edge_feature_list, nz_data);
 		}
-		node_tree_control = new NodeTree( node_labeller );
+		node_tree_control = new NodeTree( node_labeller, tag_table );
 		glimmer_drawer = new GlimmerDrawer(glimmer_layout, topo_tree, tag_table);
-//		this.addTopoTreeSelectionListener(node_tree_control);
-		tt_control.addTopoTreeSelectionListener( node_tree_control );
-		node_tree_control.addTopoTreeSelectionListener(tt_control);
+
+		
+		tt_control.addTagChangeListener(node_tree_control);
+		tt_control.addTagChangeListener(tag_control);
+		tt_control.addTagChangeListener(glimmer_drawer);
+		
 		node_tree_control.addChangeListener(tt_control);
-		tag_table.addTagChangeListener(node_tree_control);
-		tag_table.addTagChangeListener(glimmer_drawer);
-		node_tree_control.addTopoTreeSelectionListener(glimmer_drawer);
+
+		node_tree_control.addTagChangeListener(glimmer_drawer);
+		node_tree_control.addTagChangeListener(tt_control);
+		node_tree_control.addTagChangeListener(tag_control);
+
+		glimmer_drawer.addTagChangeListener(node_tree_control);
+		glimmer_drawer.addTagChangeListener(tt_control);
+		glimmer_drawer.addTagChangeListener(tag_control);
+		
+		tt_control.node_labeller = node_labeller;
+		glimmer_drawer.node_labeller = node_labeller;
+		
+		tag_control.m_node_tree = node_tree_control;
 		
 		// load html data
 		
@@ -576,7 +618,7 @@ public class Snappy extends JFrame implements ChangeListener {
 //			webBrowser.setBarsVisible(false);
 //			webBrowser.setStatusBarVisible(false);
 //			webBrowser.setHTMLContent("<html>LOW LEVEL VIEWER</html>");
-			html_dispatch = new HtmlDispatch(	node_tree_control.tree, 
+			html_dispatch = new HtmlDispatch(	node_tree_control.item_jlist, 
 												html_prefix_name, 
 												HtmlDispatch.loadHTMLList(html_listname),html_panel,renderContext);			
 			node_tree_control.addKeyListener(html_dispatch);
@@ -635,6 +677,7 @@ public class Snappy extends JFrame implements ChangeListener {
 		
 		snappyPanel.add( tt_panel );
 		snappyPanel.add( glimmer_drawer );
+//		snappyPanel.setPreferredSize(new Dimension(1024,700));
 		
 		//JScrollPane scroll_pane = new JScrollPane(graph_drawer);
 //		ScrollPane scroll_pane2 = new ScrollPane(ScrollPane.SCROLLBARS_AS_NEEDED);
@@ -680,6 +723,7 @@ public class Snappy extends JFrame implements ChangeListener {
             public void run() {
             	
             	snappy = new Snappy(args);
+//            	snappy.setSize(new Dimension(1024,700));
             }
         } );
 //        NativeInterface.runEventPump(); 

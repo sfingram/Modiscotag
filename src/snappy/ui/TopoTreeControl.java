@@ -1,6 +1,5 @@
 package snappy.ui;
 
-import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.event.ComponentEvent;
 import java.awt.event.ComponentListener;
@@ -14,21 +13,30 @@ import javax.swing.event.ChangeListener;
 
 import processing.core.PApplet;
 import processing.core.PFont;
+import snappy.graph.NodeLabeller;
+import snappy.graph.SizedLabel;
 import snappy.graph.TagChangeListener;
 import snappy.graph.TagTable;
+import snappy.graph.TagTable.Tag;
 import snappy.graph.TopoTree;
 import snappy.graph.TopoTreeNode;
 
 public class TopoTreeControl extends PApplet implements ComponentListener,
-		TopoTreeSelectionListener, ChangeListener, TagChangeListener {
+		ChangeListener, TagChangeListener {
 
+	
+	public NodeLabeller node_labeller = null;
+	
+	boolean is_hovering = false;
+	String hover_text = "";
+	
 	boolean shift_key_down = false;
 	boolean option_key_down = false;
 	
 	public TopoTree m_tt = null;
 	int levels = 0;
 	int level_size = 0;
-	int ignore_component_size = 4;
+	static public int ignore_component_size = 4;
 
 	boolean select_rect_down = false;
 	int select_rect_x = -1;
@@ -36,16 +44,19 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 	int select_rect_w = -1;
 	int select_rect_h = -1;
 
-	static final int DEF_NODE_SIZE = 1;
-	static final int SEL_NODE_SIZE = DEF_NODE_SIZE * 2;
+	static final int DEF_NODE_SIZE = 5;
+	static final int SEL_NODE_SIZE = 5;
 	static final int HI_NODE_SIZE = SEL_NODE_SIZE;
 	static final int BORDER_SIZE = 10;
 	static final int POWERS_OF_TWO = 7;
+	int PRUNE_LABEL_WIDTH = -1;
 
 	static final int HIST_WIDTH = 50;
 	static final int HIST_SCALE_WIDTH = 50;
 
 	static final int PRUNER_HEIGHT = 30;
+	static int HOVER_HEIGHT = 10;
+	static int BOTTOM_CTRL_HEIGHT = PRUNER_HEIGHT + HOVER_HEIGHT;
 
 	static final int PREFERRED_WIDTH = 800;
 	static final int PREFERRED_HEIGHT = 1000;
@@ -60,37 +71,28 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 	public Object select_changed;
 
 	public TopoTreeNode hilightedNode = null;
-	public ArrayList<TopoTreeNode> selectedNodes = null;
 
 	public int[] bins = null;
 
 	ArrayList<ChangeListener> changeListeners = null;
-	ArrayList<TopoTreeSelectionListener> ttselListeners = null;
 	
 	TagTable m_ttable = null;
-	
-	public ArrayList<TopoTreeNode> getSelectionSuperset() {
+
+	ArrayList<TagChangeListener> tagChangeListeners = null; 
+	public void addTagChangeListener( TagChangeListener listener ) {
 		
-		ArrayList<TopoTreeNode> taggedNodes = null;
-		if( selectedNodes.isEmpty() ) {
-			taggedNodes = new ArrayList<TopoTreeNode>();
-		}
-		else {
-			taggedNodes = new ArrayList<TopoTreeNode>(selectedNodes);
-		}
-		if(hilightedNode != null && !selectedNodes.contains(hilightedNode)) {
-			taggedNodes.add(hilightedNode);
-		}
-		
-		return taggedNodes;
+		tagChangeListeners.add( listener );
 	}
+
 	public void setTagTable( TagTable ttable ) {
-		
+
 		m_ttable = ttable;
+		m_ttable.addTagChangeListener(this);
 	}
 
 	public boolean updateHilight( TopoTreeNode node ) {
 		
+//		System.out.println("Begin update hilight");
 		if( node != null ) {
 			if( node.hilighted ) {
 				
@@ -102,6 +104,31 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 			}
 			hilightedNode = node;
 			hilightedNode.hilighted = true;
+			
+			// add the new node to the selection
+			
+			m_ttable.promoteTagSilent( m_ttable.getSelTag() );
+
+			while( m_ttable.topTag().full_components.size() > 0 ) {
+
+				TopoTreeNode n = null;
+				for( TopoTreeNode k : m_ttable.topTag().full_components ) {
+					if( n == null ) {
+						n = k;
+					}
+					else if( n.num_points < k.num_points ) {
+						n = k;
+					}
+				}
+				
+				m_ttable.topTag().removeComponent(n);
+			}
+			m_ttable.topTag().addComponent(node);
+			for( TagChangeListener tagChangeListener : tagChangeListeners ) {
+				
+				tagChangeListener.tagsChanged();
+			}		
+			redraw();
 		}
 		else {
 			
@@ -111,57 +138,47 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 			}
 			hilightedNode.hilighted = false;
 			hilightedNode = null;
+			
+			// 
+			m_ttable.promoteTagSilent( m_ttable.getSelTag() );
+			while( m_ttable.topTag().full_components.size() > 0 ) {
+
+				TopoTreeNode n = null;
+				for( TopoTreeNode k : m_ttable.topTag().full_components ) {
+					if( n == null ) {
+						n = k;
+					}
+					else if( n.num_points < k.num_points ) {
+						n = k;
+					}
+				}
+				
+				m_ttable.topTag().removeComponent(n);
+			}
+			for( TagChangeListener tagChangeListener : tagChangeListeners ) {
+				
+				tagChangeListener.tagsChanged();
+			}		
+			redraw();
 		}
+//		System.out.println("End update hilight");
 		
 		return true;
 	}
-	
-	public boolean removeFromSelectSet( TopoTreeNode node ) {
 		
-		if( !node.selected ) {
-			
-			return false;
-		}
-		
-		node.selected = false;
-		this.selectedNodes.remove(node);
-		if( node.hilighted ) {
-			
-			updateHilight(null);
-		}
-		
-		
-		return true;
-	}
-	
-	/*
-	 * returns if it is dirty or not
-	 */
-	public boolean addToSelectSet( TopoTreeNode node ) {
-		
-		if( node.selected ) {
-			
-			return false;
-		}
-		
-		node.selected = true;
-		this.selectedNodes.add(node);
-		
-		return true;
-	}
 	
 	public TopoTreeControl(TopoTree tt, int[] bins) {
 
 		super();
 
+		tagChangeListeners = new ArrayList<TagChangeListener>();
+		
 		m_tt = tt;
 
 		ignore_component_size = (int) Math.pow(2, sel_prune);
 		this.bins = bins;
 		levels = bins.length;
-		selectedNodes = new ArrayList<TopoTreeNode>();
 		changeListeners = new ArrayList<ChangeListener>();
-		ttselListeners = new ArrayList<TopoTreeSelectionListener>();
 
 		cutoff_changed = new Object();
 		compon_changed = new Object();
@@ -182,11 +199,6 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 				redraw();
 			}
 		});
-	}
-
-	public void addTopoTreeSelectionListener(TopoTreeSelectionListener ttsl) {
-
-		this.ttselListeners.add(ttsl);
 	}
 
 	public void addChangeListener(ChangeListener cl) {
@@ -240,6 +252,8 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 
 		prune_font = createFont("SansSerif", 12);
 		textFont(prune_font);
+		HOVER_HEIGHT = (int)Math.round(textAscent()+textDescent()) + 5;
+		BOTTOM_CTRL_HEIGHT = PRUNER_HEIGHT + HOVER_HEIGHT;
 		noLoop();
 		this.setPreferredSize(new Dimension(PREFERRED_WIDTH, PREFERRED_HEIGHT));
 	}
@@ -274,7 +288,7 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 		// break up the scene into levels (at which the tree will slice things
 		// up)
 
-		level_size = (int) Math.round(((float) getHeight() - PRUNER_HEIGHT)
+		level_size = (int) Math.round(((float) getHeight() - BOTTOM_CTRL_HEIGHT)
 				/ (levels + 1.f));
 
 		// draw the scale 
@@ -282,16 +296,16 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 		fill(0);
 		stroke(0);
 		
-		line(5,level_size,5 + 1*HIST_SCALE_WIDTH/3,level_size);
-		line(5,level_size*levels,5 + 1*HIST_SCALE_WIDTH/3,level_size*levels);
-		text("1.0", 10 + 1*HIST_SCALE_WIDTH/3,level_size);
-		text("0.0", 10 + 1*HIST_SCALE_WIDTH/3,level_size*levels);
+		line(HIST_WIDTH + 5,level_size,HIST_WIDTH + 5 + 1*HIST_SCALE_WIDTH/3,level_size);
+		line(HIST_WIDTH + 5,level_size*levels,HIST_WIDTH + 5 + 1*HIST_SCALE_WIDTH/3,level_size*levels);
+		text("1.0", HIST_WIDTH + 10 + 1*HIST_SCALE_WIDTH/3,level_size*2);
+		text("0.0", HIST_WIDTH + 10 + 1*HIST_SCALE_WIDTH/3,level_size*levels);
 		
-		line(5 + HIST_SCALE_WIDTH/6,level_size,5 + HIST_SCALE_WIDTH/6,level_size*levels);
+		line(HIST_WIDTH + 5 + HIST_SCALE_WIDTH/6,level_size,HIST_WIDTH + 5 + HIST_SCALE_WIDTH/6,level_size*levels);
 		
 		rotate(-PI/2.f);
 		String scale_title = "Distance Threshold"; 
-		text(scale_title,-(level_size*levels + level_size)/2 - textWidth(scale_title)/2, 5 + 2*HIST_SCALE_WIDTH/3 );
+		text(scale_title,-(level_size*levels + level_size)/2 - textWidth(scale_title)/2, HIST_WIDTH + 5 + 2*HIST_SCALE_WIDTH/3 );
 		rotate(PI/2.f);
 		
 		// draw the levels
@@ -302,7 +316,7 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 
 
 			int y = level_size + i * level_size;
-			line(HIST_SCALE_WIDTH, y, getWidth() - HIST_WIDTH, y);
+			line(HIST_WIDTH + HIST_SCALE_WIDTH, y, getWidth(), y);
 		}
 
 		// slice up the top level
@@ -313,7 +327,7 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 			if (ttn.num_points >= ignore_component_size)
 				topsize += ttn.num_points;
 		}
-		int left = BORDER_SIZE+HIST_SCALE_WIDTH;
+		int left = BORDER_SIZE+HIST_SCALE_WIDTH+HIST_WIDTH;
 		int right = left;
 		for (TopoTreeNode ttn : m_tt.roots) {
 
@@ -322,7 +336,19 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 				right += (int) Math
 						.round(((getWidth() - HIST_WIDTH - HIST_SCALE_WIDTH) - 2 * BORDER_SIZE)
 								* ((float) ttn.num_points) / ((float) topsize));
-				drawNode(ttn, left, right, 0, -1, -1, true);
+				
+				drawEdge(ttn, left, right, 0, -1, -1, true,null);
+				for( int i = m_ttable.tag_queue.size()-1; i >= 0; i-- ) {
+
+					Tag tag = m_ttable.tag_queue.get(i);
+					drawEdge(ttn, left, right, 0, -1, -1, true,tag);
+				}
+				drawNode(ttn, left, right, 0, -1, -1, true,null);
+				for( int i = m_ttable.tag_queue.size()-1; i >= 0; i-- ) {
+
+					Tag tag = m_ttable.tag_queue.get(i);
+					drawNode(ttn, left, right, 0, -1, -1, true,tag);
+				}
 				left = right;
 			}
 		}
@@ -331,8 +357,7 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 
 		fill(255);
 		stroke(255);
-		rect(getWidth() - HIST_WIDTH, 0, HIST_WIDTH, getHeight()
-				- PRUNER_HEIGHT);
+		rect(0, 0, HIST_WIDTH, getHeight() - BOTTOM_CTRL_HEIGHT);
 
 		// do some normalization
 
@@ -342,11 +367,15 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 
 			if (bins[i] > 0) {
 
-				max_binlen = Math.max(max_binlen, (float) Math.log10(bins[i]));
-				min_binlen = Math.min(min_binlen, (float) Math.log10(bins[i]));
+				max_binlen = Math.max(max_binlen, (float) bins[i]);
+				min_binlen = Math.min(min_binlen, (float) bins[i]);
+//				max_binlen = Math.max(max_binlen, (float) Math.log10(bins[i]));
+//				min_binlen = Math.min(min_binlen, (float) Math.log10(bins[i]));
 			} else {
-				max_binlen = Math.max(max_binlen, -2.f);
-				min_binlen = Math.min(min_binlen, -2.f);
+//				max_binlen = Math.max(max_binlen, -2.f);
+//				min_binlen = Math.min(min_binlen, -2.f);
+				max_binlen = Math.max(max_binlen, 0);
+				min_binlen = Math.min(min_binlen, 0);
 			}
 		}
 		max_binlen += 1.0;
@@ -362,17 +391,20 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 			float bf_val = 0.f;
 			if (bins[(bins.length - 1) - i] == 0) {
 
-				bf_val = -2.f;
+				bf_val = 0;
 			} else {
-				bf_val = (float) Math.log10(bins[(bins.length - 1) - i]);
+//				bf_val = (float) Math.log10(bins[(bins.length - 1) - i]);
+				bf_val = (float) bins[(bins.length - 1) - i];
 			}
 			if( i == 0 ) {
-				rect(getWidth() - HIST_WIDTH + 1, y, HIST_WIDTH
+				rect((HIST_WIDTH - 1) - (HIST_WIDTH
+						* (max_binlen - min_binlen) / binrange), y, HIST_WIDTH
 						* (max_binlen - min_binlen) / binrange, level_size);
 			}
 			else if ( i < bins.length-1 ) {
-				rect(getWidth() - HIST_WIDTH + 1, y, HIST_WIDTH
-						* (bf_val - min_binlen) / binrange, level_size);				
+				rect((HIST_WIDTH - 1) - ((bf_val-min_binlen > 0)?Math.max(2, HIST_WIDTH
+						* (bf_val - min_binlen) / binrange):0), y, (bf_val-min_binlen > 0)?Math.max(2, HIST_WIDTH
+						* (bf_val - min_binlen) / binrange):0, level_size);				
 			}
 		}
 
@@ -380,12 +412,20 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 
 		noStroke();
 		fill(64);
-		rect(0,getHeight() - PRUNER_HEIGHT - 15,getWidth(),PRUNER_HEIGHT+15);
+		rect(0,getHeight() - BOTTOM_CTRL_HEIGHT - 15,getWidth(),PRUNER_HEIGHT+15);
+		
+		fill(255);
+		String prune_label = " Show Nodes >= ";
+		PRUNE_LABEL_WIDTH = (int)Math.ceil(textWidth(" Show Nodes >= "));
+		text(prune_label, 5, getHeight()
+				- BOTTOM_CTRL_HEIGHT
+				+ (PRUNER_HEIGHT / 2 - (textAscent() + textDescent())/2 ));
 		
 		fill(157, 106, 94);
 		noStroke();
 
-		int prune_bin_width = (getWidth()) / POWERS_OF_TWO;
+		
+		int prune_bin_width = (getWidth()-PRUNE_LABEL_WIDTH) / POWERS_OF_TWO;
 		for (int i = 0; i < POWERS_OF_TWO; i++) {
 
 			if (i > sel_prune) {
@@ -403,24 +443,24 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 			noStroke();
 //			rect(i * prune_bin_width, getHeight() - PRUNER_HEIGHT,
 //					prune_bin_width-5, getHeight()-5);
-			roundrect(i * prune_bin_width + 10, getHeight() - PRUNER_HEIGHT-5,
+			roundrect(PRUNE_LABEL_WIDTH + i * prune_bin_width + 10, getHeight() - BOTTOM_CTRL_HEIGHT-5,
 					prune_bin_width-20, PRUNER_HEIGHT-10,10);
 			
 			fill(255);
 			String str = "" + ((int) Math.pow(2, i));
-			text(str, i * prune_bin_width
-					+ (prune_bin_width / 2 - textWidth(str)), getHeight()
-					- PRUNER_HEIGHT
+			text(str, PRUNE_LABEL_WIDTH + i * prune_bin_width
+					+ (prune_bin_width / 2 - textWidth(str)) + 10, getHeight()
+					- BOTTOM_CTRL_HEIGHT
 					+ (PRUNER_HEIGHT / 2 - (textAscent() + textDescent())/2 ));
 
 			fill(0);
 			stroke(0);
 			strokeWeight(1.f);
-			int rad = SEL_NODE_SIZE + (int)Math.round(SEL_NODE_SIZE * Math.log(((int) Math.pow(2, i))));
-			ellipse(i * prune_bin_width
-					+ (prune_bin_width / 2 - textWidth(str)) - rad - 2, getHeight()
-					- PRUNER_HEIGHT - 10
-					+ (PRUNER_HEIGHT / 2 + (textAscent() + textDescent()) / 2) - rad,rad,rad);
+//			int rad = SEL_NODE_SIZE + (int)Math.round(SEL_NODE_SIZE * Math.log(((int) Math.pow(2, i))));
+//			ellipse( PRUNE_LABEL_WIDTH + i * prune_bin_width
+//					+ (prune_bin_width / 2 - textWidth(str)) - rad - 2, getHeight()
+//					- BOTTOM_CTRL_HEIGHT - 10
+//					+ (PRUNER_HEIGHT / 2 + (textAscent() + textDescent()) / 2) - rad,rad,rad);
 			strokeWeight(5.f);
 		}
 		strokeWeight(1.f);
@@ -442,17 +482,203 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 			rect(3/2,3/2,getWidth()-3,getHeight()-3);
 			strokeWeight(1.f);
 		}
+		
+		// draw hover box
+		
+		stroke(128);
+		fill(255);
+		rect(0,getHeight() - HOVER_HEIGHT,getWidth(),HOVER_HEIGHT);
+		if( is_hovering ) {
+			fill(PrettyColors.DarkGrey.getRed(),PrettyColors.DarkGrey.getGreen(),PrettyColors.DarkGrey.getBlue());
+			text(hover_text, 5, getHeight() - (textAscent() + textDescent()) / 2);
+		}
+		
 	}
 
 	// recursive draw routine
 
 	public void drawNode(TopoTreeNode node, int left, int right, int level,
-			int px, int py, boolean drawNode) {
+			int px, int py, boolean drawNode, Tag t ) {
 
+		boolean draw_full = false;
+		boolean self_in_tag = t==null?true:(t.part_components.contains(node) || t.full_components.contains(node));
+		if( !self_in_tag ) {
+			
+			return;
+		}
+		
 		// draw the edge to its parent
 		if (px != -1) {
 
-			stroke(64);
+			if( t != null && t.part_components.contains(node) ) {
+				
+				stroke(	t.tag_color.getRed(),
+						t.tag_color.getGreen(),
+						t.tag_color.getBlue());
+				if( t == m_ttable.topTag() || t == m_ttable.topNonitemTag() ) {
+					strokeWeight(3.f);
+				}
+				else {
+					strokeWeight(2.f);
+				}
+			}
+			else {
+				
+				if( t != null && t.full_components.contains(node) ) {
+					
+					draw_full = true;
+					
+					stroke(	t.tag_color.getRed(),
+							t.tag_color.getGreen(),
+							t.tag_color.getBlue());
+					if( t == m_ttable.topTag() || t == m_ttable.topNonitemTag() ) {
+						strokeWeight(3.f);
+					}
+					else {
+						strokeWeight(2.f);
+					}
+				}
+				else {
+				
+					stroke(128);
+					strokeWeight(1.f);
+				}
+			}
+			
+//			line((left + right) / 2, level_size * (level + 1), px, py);
+		}
+
+		// break out if there's no room to recurse
+
+		if (left != right) {
+
+			// slice up the remaining space
+
+			int topsize = 0;
+			for (TopoTreeNode ttn : node.children) {
+
+				if (ttn.num_points >= ignore_component_size)
+					topsize += ttn.num_points;
+			}
+			int newleft = left;
+			int newright = left;
+			for (TopoTreeNode ttn : node.children) {
+				
+				boolean child_in_tag = t==null?true:(t.part_components.contains(ttn) || t.full_components.contains(ttn));
+				
+				if (ttn.num_points >= ignore_component_size ) {
+
+					newright += (int) Math.round((right - left)
+							* ((float) ttn.num_points) / ((float) topsize));
+					
+					drawNode(ttn, newleft, newright, level + 1,
+							(left + right) / 2, level_size * (level + 1), true, t);
+					
+					newleft = newright;
+				}
+				else {
+
+					if( child_in_tag && t != null ) {
+						
+						draw_full = true; 
+					}
+				}
+			}
+		}
+
+		node.x = (left + right) / 2;
+		node.y = level_size * (level + 1);
+
+		// draw the node
+		if ((drawNode || node.hilighted) && !node.isSameAsChild) {
+
+			// chose color based on tags
+			if (draw_full && t != null) {
+				
+				fill(	t.tag_color.getRed(),
+						t.tag_color.getGreen(), 
+						t.tag_color.getBlue());
+			}
+			else {
+				fill(	PrettyColors.Grey.getRed(), 
+						PrettyColors.Grey.getGreen(), 
+						PrettyColors.Grey.getBlue());
+			}
+			stroke(0);
+
+			if( !node.hilighted )
+				noStroke();
+
+			int node_size = DEF_NODE_SIZE;
+			if (node.hilighted || (draw_full && (t==m_ttable.topTag()|| t == m_ttable.topNonitemTag()))) {
+				node_size = 3*DEF_NODE_SIZE;
+			}
+			if( t != null && !draw_full )
+				return;
+			rect((left + right) / 2 - node_size/2, level_size * (level + 1) - node_size/2,node_size,node_size);
+			
+			if (node.hilighted) {
+
+				if ( draw_full ) {
+					
+					stroke(	2*t.tag_color.getRed()/3,
+							2*t.tag_color.getGreen()/3, 
+							2*t.tag_color.getBlue()/3);
+				}
+				strokeWeight(2.f);
+				rect((left + right) / 2 - 3*node_size/4, level_size * (level + 1) - 3*node_size/4,3*node_size/2,3*node_size/2);
+			}
+			
+			stroke(0);
+			strokeWeight(1.f);
+		}
+	}
+
+	public void drawEdge(TopoTreeNode node, int left, int right, int level,
+			int px, int py, boolean drawNode, Tag t ) {
+
+		boolean self_in_tag = t==null?true:(t.part_components.contains(node) || t.full_components.contains(node));
+		if( !self_in_tag ) {
+			
+			return;
+		}
+		
+		// draw the edge to its parent
+		if (px != -1) {
+
+			if( t != null && t.part_components.contains(node) ) {
+				
+				stroke(	t.tag_color.getRed(),
+						t.tag_color.getGreen(),
+						t.tag_color.getBlue());
+				if( t == m_ttable.topTag() || t == m_ttable.topNonitemTag()) {
+					strokeWeight(6.f);
+				}
+				else {
+					strokeWeight(2.f);
+				}
+			}
+			else {
+				
+				if( t != null && t.full_components.contains(node) ) {
+					
+					stroke(	t.tag_color.getRed(),
+							t.tag_color.getGreen(),
+							t.tag_color.getBlue());
+					if( t == m_ttable.topTag() || t == m_ttable.topNonitemTag() ) {
+						strokeWeight(6.f);
+					}
+					else {
+						strokeWeight(2.f);
+					}
+				}
+				else {
+				
+					stroke(128);
+					strokeWeight(1.f);
+				}
+			}
+			
 			line((left + right) / 2, level_size * (level + 1), px, py);
 		}
 
@@ -471,85 +697,154 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 			int newleft = left;
 			int newright = left;
 			for (TopoTreeNode ttn : node.children) {
-
-				if (ttn.num_points >= ignore_component_size) {
+				
+				if (ttn.num_points >= ignore_component_size ) {
 
 					newright += (int) Math.round((right - left)
 							* ((float) ttn.num_points) / ((float) topsize));
-					drawNode(ttn, newleft, newright, level + 1,
-							(left + right) / 2, level_size * (level + 1), true /*
-																				 * ttn
-																				 * .
-																				 * num_points
-																				 * !=
-																				 * node
-																				 * .
-																				 * num_points
-																				 */);
+					
+					drawEdge(ttn, newleft, newright, level + 1,
+							(left + right) / 2, level_size * (level + 1), true, t);
+					
 					newleft = newright;
 				}
 			}
 		}
-
-		node.x = (left + right) / 2;
-		node.y = level_size * (level + 1);
-
-		// draw the node
-		if ((drawNode || node.hilighted) && !node.isSameAsChild) {
-
-			// if (level != sel_level) {
-			
-			// chose color based on tags
-			if( node.tags.keySet().size() > 0 ) {
-				int selected_tag = 0;
-				int max_tag_count = -1;
-				for( Integer tag : node.tags.keySet() ) {
-
-					if( max_tag_count < node.tags.get(tag) ) {
-						
-						max_tag_count = node.tags.get(tag);
-						selected_tag = tag;
-					}
-					if( max_tag_count == node.tags.get(tag) ) {
-						
-						selected_tag = m_ttable.getTopTag(tag, selected_tag);
-					}
-				}
-				
-				Color tagColor = node.tag_colors.get(selected_tag);
-				fill(tagColor.getRed(),tagColor.getGreen(), tagColor.getBlue());
-			}
-			else {
-				fill(PrettyColors.Grey.getRed(), PrettyColors.Grey.getGreen(), PrettyColors.Grey.getBlue());
-			}
-			stroke(0);
-
-			if (node.selected) {
-
-				stroke(Color.black.getRed(), Color.black.getGreen(), Color.black.getBlue());
-				strokeWeight(5.f);
-			}
-			if (node.hilighted) {
-
-				stroke(PrettyColors.Red.getRed(), PrettyColors.Red.getGreen(), PrettyColors.Red.getBlue());
-				strokeWeight(5.f);
-			}
-			if( !node.selected && !node.hilighted )
-				noStroke();
-
-			int node_size = DEF_NODE_SIZE + (int)Math.round(DEF_NODE_SIZE * Math.log(node.num_points));
-			if (node.selected)
-				node_size = Math.max(6, SEL_NODE_SIZE + (int)Math.round(SEL_NODE_SIZE * Math.log(node.num_points)))-5;
-			if (node.hilighted) {
-				node_size = Math.max(6, HI_NODE_SIZE + (int)Math.round(HI_NODE_SIZE * Math.log(node.num_points)))-5;
-//				System.out.println("HINODESIZE = "+node_size);
-			}
-			ellipse((left + right) / 2, level_size * (level + 1), node_size,
-					node_size);
-			stroke(0);
-			strokeWeight(1.f);
-		}
 	}
+
+//	public TagQuery drawNode(TopoTreeNode node, int left, int right, int level,
+//			int px, int py, boolean drawNode) {
+//
+//		TagQuery tq_self = m_ttable.queryNode(node);
+//		
+//		// draw the edge to its parent
+//		if (px != -1) {
+//
+//			if( tq_self.isPartial ) {
+//				
+//				stroke(	tq_self.partialColor.getRed(),
+//						tq_self.partialColor.getGreen(),
+//						tq_self.partialColor.getBlue());
+//				if( tq_self.queuePos == 0 ) {
+//					strokeWeight(3.f);
+//				}
+//				else {
+//					strokeWeight(2.f);
+//				}
+//			}
+//			else {
+//				
+//				if( tq_self.isFull ) {
+//					
+//					stroke(	tq_self.fullColor.getRed(),
+//							tq_self.fullColor.getGreen(),
+//							tq_self.fullColor.getBlue());
+//					if( tq_self.queuePos == 0 ) {
+//						strokeWeight(3.f);
+//					}
+//					else {
+//						strokeWeight(2.f);
+//					}
+//				}
+//				else {
+//				
+//					stroke(128);
+//					strokeWeight(1.f);
+//				}
+//			}
+//			
+//			line((left + right) / 2, level_size * (level + 1), px, py);
+//		}
+//
+//		boolean has_children = false;
+//		// break out if there's no room to recurse
+//
+//		if (left != right) {
+//
+//			// slice up the remaining space
+//
+//			int topsize = 0;
+//			for (TopoTreeNode ttn : node.children) {
+//
+//				if (ttn.num_points >= ignore_component_size)
+//					topsize += ttn.num_points;
+//			}
+//			int newleft = left;
+//			int newright = left;
+//			for (TopoTreeNode ttn : node.children) {
+//
+//				if (ttn.num_points >= ignore_component_size) {
+//
+//					newright += (int) Math.round((right - left)
+//							* ((float) ttn.num_points) / ((float) topsize));
+//					
+//					drawNode(ttn, newleft, newright, level + 1,
+//							(left + right) / 2, level_size * (level + 1), true);
+//					
+//					newleft = newright;
+//				}
+//				else {
+//					
+//					TagQuery tq_child = m_ttable.queryNode(ttn);
+//					if( tq_child.hasTag && tq_child.queuePos <= tq_self.queuePos ) {
+//						
+//						tq_self.queuePos = tq_child.queuePos ;
+//						tq_self.isFull = true;
+//						tq_self.fullColor = tq_child.fullColor;
+//					}
+//				}
+//			}
+//		}
+//
+//		node.x = (left + right) / 2;
+//		node.y = level_size * (level + 1);
+//
+//		// draw the node
+//		if ((drawNode || node.hilighted) && !node.isSameAsChild) {
+//
+//			// if (level != sel_level) {
+//			
+//			// chose color based on tags
+//			if (tq_self.hasTag && tq_self.isFull) {
+//				
+//				fill(	tq_self.fullColor.getRed(),
+//						tq_self.fullColor.getGreen(), 
+//						tq_self.fullColor.getBlue());
+//			}
+//			else {
+//				fill(	PrettyColors.Grey.getRed(), 
+//						PrettyColors.Grey.getGreen(), 
+//						PrettyColors.Grey.getBlue());
+//			}
+//			stroke(0);
+//
+//			if( !node.hilighted )
+//				noStroke();
+//
+//			int node_size = 2*DEF_NODE_SIZE + (int)Math.round(DEF_NODE_SIZE * Math.log(node.num_points));
+//			if (node.hilighted || (tq_self.hasTag && tq_self.isFull && tq_self.queuePos==0)) {
+//				node_size = Math.max(6, HI_NODE_SIZE + (int)Math.round(1.5*DEF_NODE_SIZE * Math.log(node.num_points)));
+//			}
+//			rect((left + right) / 2 - node_size/2, level_size * (level + 1) - node_size/2,node_size,node_size);
+//			
+//			if (node.hilighted) {
+//
+//				if (tq_self.hasTag && tq_self.isFull) {
+//					
+//					stroke(	2*tq_self.fullColor.getRed()/3,
+//							2*tq_self.fullColor.getGreen()/3, 
+//							2*tq_self.fullColor.getBlue()/3);
+//				}
+//				strokeWeight(2.f);
+//				rect((left + right) / 2 - 3*node_size/4, level_size * (level + 1) - 3*node_size/4,3*node_size/2,3*node_size/2);
+//			}
+//			
+//			stroke(0);
+//			strokeWeight(1.f);
+//		}
+//		
+//		return tq_self;
+//	}
 
 	public void keyReleased() {
 		
@@ -576,16 +871,11 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 				shift_key_down = true;
 			}
 			if( keyCode == UP ) {
+				
 				if( hilightedNode != null && hilightedNode.diffParent != null && 
 						hilightedNode.diffParent.num_points >= ignore_component_size  && !hilightedNode.isSameAsChild) {
 
 					updateHilight(hilightedNode.diffParent);
-					
-					for (TopoTreeSelectionListener ttsl : ttselListeners) {
-						
-						ttsl.selectionChanged(selectedNodes, hilightedNode, true, true);
-					}
-					redraw();
 				}				
 			}
 			if( keyCode == DOWN ) {
@@ -604,12 +894,7 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 						
 						updateHilight( node );
 						
-						for (TopoTreeSelectionListener ttsl : ttselListeners) {
-							
-							ttsl.selectionChanged(selectedNodes, hilightedNode, true, true);
-						}
 					}
-					redraw();
 				}
 			}
 			if( keyCode == LEFT ) {
@@ -634,16 +919,11 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 					if( node != null ) {
 						
 						updateHilight( node );
-						
-						for (TopoTreeSelectionListener ttsl : ttselListeners) {
-							
-							ttsl.selectionChanged(selectedNodes, hilightedNode, true, true);
-						}
 					}
-					redraw();
 				}
 			}
 			if( keyCode == RIGHT) {
+				
 				//System.out.println("RIGHT");
 				if( hilightedNode != null && hilightedNode.diffParent != null ) {
 					
@@ -665,38 +945,11 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 					if( node != null ) {
 						
 						updateHilight( node );
-						
-						for (TopoTreeSelectionListener ttsl : ttselListeners) {
-							
-							ttsl.selectionChanged(selectedNodes, hilightedNode, true, true);
-						}
 					}
-					redraw();
 				}
 			}
 		}
 		else {
-			if( key == '.') {
-				if( hilightedNode != null && addDescendents(hilightedNode) ) {
-					
-					for (TopoTreeSelectionListener ttsl : ttselListeners) {
-						
-						ttsl.selectionChanged(selectedNodes, hilightedNode, true, true);
-					}
-				}
-				redraw();
-			}
-			if( key == ',') {
-				
-				if( hilightedNode != null && removeDescendents(hilightedNode) ) {
-					
-					for (TopoTreeSelectionListener ttsl : ttselListeners) {
-						
-						ttsl.selectionChanged(selectedNodes, hilightedNode, true, true);
-					}
-				}
-				redraw();
-			}
 			if( key =='[') {
 				
 				this.pruneTree(Math.max(0,sel_prune-1));
@@ -707,118 +960,10 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 			}
 		}
 	}
-	
-	public void mouseReleased() {
-
-		if (select_rect_down) {
-
-			select_rect_down = false;
-			redraw();
-		}
-	}
-
-	public void mousePressed() {
-
-		if (mouseY < getHeight() - PRUNER_HEIGHT) {
-
-			if (!select_rect_down) {
-
-//				for (ArrayList<TopoTreeNode> nodes : m_tt.level_lookup) {
-//					for (TopoTreeNode node : nodes) {
-//
-//						node.selected = false;
-//					}
-//				}
-//
-//				for (ChangeListener cl : changeListeners) {
-//
-//					cl.stateChanged(new ChangeEvent(select_changed));
-//				}
-
-				select_rect_down = true;
-				select_rect_x = mouseX;
-				select_rect_y = mouseY;
-				select_rect_w = 0;
-				select_rect_h = 0;
-				redraw();
-			}
-		}
-	}
-
-	public void mouseDragged() {
-
-		if (select_rect_down) {
-
-			// update selection rect dimensions
-
-			select_rect_w = -(select_rect_x - mouseX);
-			select_rect_h = -(select_rect_y - mouseY);
-
-			if( Math.max(Math.abs(select_rect_w),Math.abs(select_rect_h)) < 2 ) {
-				
-				return;
-			}
-			
-			// update the selection details
-
-			int i_top = Math.min(select_rect_y, select_rect_y + select_rect_h);
-			int i_left = Math.min(select_rect_x, select_rect_x + select_rect_w);
-			int i_bottom = Math.max(select_rect_y, select_rect_y
-					+ select_rect_h);
-			int i_right = Math
-					.max(select_rect_x, select_rect_x + select_rect_w);
-
-			boolean isDirty = false;
-
-			for (ArrayList<TopoTreeNode> nodes : m_tt.level_lookup) {
-				for (TopoTreeNode node : nodes) {
-
-					if (node.num_points >= ignore_component_size && !node.isSameAsChild) {
-
-						if (node.x > i_left && node.y > i_top
-								&& node.x < i_right && node.y < i_bottom) {
-
-							if( option_key_down && shift_key_down ) {
-
-								isDirty = removeFromSelectSet(node) || isDirty;
-							}
-							else {
-								
-								isDirty = addToSelectSet(node) || isDirty;
-							}
-						} else if ( !option_key_down ) {
-
-							isDirty = removeFromSelectSet(node) || isDirty;
-						}
-					}
-				}
-			}
-			
-			if( hilightedNode == null && !selectedNodes.isEmpty()) {
-				
-				isDirty = updateHilight(selectedNodes.get(0)) || isDirty;
-			}
-
-			// notify listeners
-			if (isDirty) {
-				for (TopoTreeSelectionListener ttsl : ttselListeners) {
-					
-					ttsl.selectionChanged(selectedNodes, hilightedNode, true, true);
-				}
-			}
-
-			redraw();
-		}
-	}
 
 	public void mouseMoved() {
-	}
 
-	public void mouseClicked() {
-
-		boolean isDirty = false;
-		
-		if (mouseY < getHeight() - PRUNER_HEIGHT && mouseY >= 0 && mouseX >= 0
+		if (mouseY < getHeight() - BOTTOM_CTRL_HEIGHT && mouseY >= 0 && mouseX >= 0
 				&& mouseX < getWidth()) {
 
 			int mindist = Integer.MAX_VALUE;
@@ -827,73 +972,72 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 			for (ArrayList<TopoTreeNode> nodes : m_tt.level_lookup) {
 				for (TopoTreeNode node : nodes) {
 
-					if( option_key_down ) {
-						
-						if (node.num_points >= ignore_component_size  && !node.isSameAsChild) {
-	
-							int dx = mouseX - node.x;
-							int dy = mouseY - node.y;
-							int dist = (int) Math.ceil(Math.sqrt(dx * dx + dy * dy));
-							if (dist <= HI_NODE_SIZE + (int)Math.round(HI_NODE_SIZE * Math.log(node.num_points)) && dist < mindist) {
-	
-								mindist = dist;
-								minnode = node;
-							}
+					if (node.num_points >= ignore_component_size  && !node.isSameAsChild
+							/*&& node.selected*/) {
+
+						int dx = mouseX - node.x;
+						int dy = mouseY - node.y;
+						int dist = (int) Math.ceil(Math.sqrt(dx * dx + dy * dy));
+						if (dist <= HI_NODE_SIZE + (int)Math.round(HI_NODE_SIZE * Math.log(node.num_points)) && dist < mindist) {
+
+							minnode = node;
+							mindist = dist;
 						}
-					}
-					else {
-						if (node.num_points >= ignore_component_size  && !node.isSameAsChild
-								/*&& node.selected*/) {
-	
-							int dx = mouseX - node.x;
-							int dy = mouseY - node.y;
-							int dist = (int) Math.ceil(Math.sqrt(dx * dx + dy * dy));
-							if (dist <= HI_NODE_SIZE + (int)Math.round(HI_NODE_SIZE * Math.log(node.num_points)) && dist < mindist) {
-	
-								mindist = dist;
-								isDirty = updateHilight(node) || isDirty;
-							} else {
-								if (node.hilighted) {
-									isDirty = updateHilight(null) || isDirty;
-								}
-							}
-						} 
-					}
-				}
-			}
-
-			if( option_key_down && minnode != null ) {
-				
-				if( minnode.selected ) {
-					isDirty = removeFromSelectSet(minnode) || isDirty;
-				}
-				else {
-					isDirty = addToSelectSet(minnode) || isDirty;
-				}
-				if( minnode.hilighted && !minnode.selected) {
-					isDirty = updateHilight(null) || isDirty;
+					} 
 				}
 			}
 			
-			if( hilightedNode == null && !selectedNodes.isEmpty()) {
-				
-				isDirty = updateHilight(selectedNodes.get(0)) || isDirty;
-			}
+			if( minnode != null ) {
 
-			if( isDirty ) {
-				for (TopoTreeSelectionListener ttsl : ttselListeners) {
-					
-					ttsl.selectionChanged(selectedNodes, hilightedNode, true, true);
+				is_hovering = true;
+				hover_text = " " + minnode.num_points + ": ";
+				for (SizedLabel sl : node_labeller.getSummaryLabel(minnode)) {
+
+					hover_text += sl.label + " ";
+				}
+				
+				redraw();
+			}
+		}
+	}
+
+	public void mouseClicked() {
+
+		if (mouseY < getHeight() - BOTTOM_CTRL_HEIGHT && mouseY >= 0 && mouseX >= 0
+				&& mouseX < getWidth()) {
+
+			int mindist = Integer.MAX_VALUE;
+			TopoTreeNode minnode = null;
+
+			for (ArrayList<TopoTreeNode> nodes : m_tt.level_lookup) {
+				for (TopoTreeNode node : nodes) {
+
+					if (node.num_points >= ignore_component_size  && !node.isSameAsChild
+							/*&& node.selected*/) {
+
+						int dx = mouseX - node.x;
+						int dy = mouseY - node.y;
+						int dist = (int) Math.ceil(Math.sqrt(dx * dx + dy * dy));
+						if (dist <= HI_NODE_SIZE + (int)Math.round(HI_NODE_SIZE * Math.log(node.num_points)) && dist < mindist) {
+
+							minnode = node;
+							mindist = dist;
+						}
+					} 
 				}
 			}
 			
-			redraw();
+			if( minnode != null ) {
+				
+				updateHilight(minnode);
+			}
 		} else {
 
-			pruneTree(Math
-					.min(POWERS_OF_TWO,
-							(int) (mouseX / ((getWidth() - HIST_WIDTH) / POWERS_OF_TWO))));
-			
+			if( mouseX > PRUNE_LABEL_WIDTH ) {
+				pruneTree(Math
+						.min(POWERS_OF_TWO,
+								(int) ((mouseX-PRUNE_LABEL_WIDTH) / ((getWidth() - HIST_WIDTH) / POWERS_OF_TWO))));
+			}			
 		}
 	}
 	
@@ -902,28 +1046,6 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 		sel_prune = prune_amount;
 		this.setIgnoreComponenetSize((int) Math.pow(2, sel_prune));
 		
-		// remove from the selection set those things that have been removed from the tree
-		
-		boolean isDirty = false;
-		ArrayList<TopoTreeNode> remNodes = new ArrayList<TopoTreeNode>();
-		for( TopoTreeNode node : selectedNodes ) {
-		
-			if( node.num_points < ignore_component_size  && !node.isSameAsChild) {
-				
-				remNodes.add(node);
-			}
-		}
-		for( TopoTreeNode node : remNodes ) {
-			
-			isDirty = removeFromSelectSet(node) || isDirty;				
-		}
-		
-		if( isDirty ) {
-			for (TopoTreeSelectionListener ttsl : ttselListeners) {
-				
-				ttsl.selectionChanged(selectedNodes, hilightedNode, true, true);
-			}
-		}
 		redraw();
 		
 		// tell everyone about it
@@ -974,74 +1096,22 @@ public class TopoTreeControl extends PApplet implements ComponentListener,
 		return new Dimension(PREFERRED_WIDTH, PREFERRED_HEIGHT);
 	}
 	
-	public boolean removeDescendents( TopoTreeNode node ) {
-		
-		boolean isDirty = removeFromSelectSet(node);
-		if( ! node.diffChildren.isEmpty() ) {
-						
-			for( TopoTreeNode child : node.diffChildren ) {
-
-				if( child.num_points >= ignore_component_size)
-					isDirty = removeDescendents( child ) || isDirty;
-			}
-		}
-		return isDirty;
-	}
-
-	public boolean addDescendents( TopoTreeNode node ) {
-		
-//		System.out.println(""+node);
-		boolean isDirty = addToSelectSet(node);
-		if( ! node.diffChildren.isEmpty() ) {
-						
-			for( TopoTreeNode child : node.diffChildren ) {
-
-//				System.out.println("child: " + child + " # = " + child.num_points);
-				if( child.num_points >= ignore_component_size)
-					isDirty = addDescendents( child ) || isDirty;
-			}
-		}
-//		System.out.println("isDirty = " + isDirty);
-		return isDirty;
-	}
 	
 	@Override
 	public void stateChanged(ChangeEvent arg0) {
 
 		if( arg0.getSource() instanceof TopoTreeNode ) {
 		
-			if( addDescendents((TopoTreeNode) arg0.getSource()) ) {
-				
-				for (TopoTreeSelectionListener ttsl : ttselListeners) {
-					
-					ttsl.selectionChanged(selectedNodes, hilightedNode, true, true);
-				}
-			}
 			redraw();
 		}		
 	}
 
-	@Override
-	public void selectionChanged(ArrayList<TopoTreeNode> nodes,
-			TopoTreeNode hilighted, boolean selChanged, boolean hiChanged) {
-
-		if( hiChanged ) {
-			
-			if( updateHilight(hilighted) ) {
-				
-				for (TopoTreeSelectionListener ttsl : ttselListeners) {
-					
-					ttsl.selectionChanged(selectedNodes, hilightedNode, true, true);
-				}
-			}
-		}	
-		
-		redraw();				
-	}
 
 	@Override
 	public void tagsChanged() {
 
+//		System.out.println("GOT A TAG EVENT HERE.");
+		
 		redraw();
 	}
 

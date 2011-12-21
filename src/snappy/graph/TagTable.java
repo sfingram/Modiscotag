@@ -10,29 +10,337 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.Stack;
 
 import snappy.ui.PrettyColors;
 
 public class TagTable {
 
+	public class TagQuery {
+		
+		public boolean isPartial;
+		public boolean isFull;
+		public Color fullColor;
+		public Color partialColor;
+		
+		public boolean hasTag;
+		public int queuePos;
+		
+		public TagQuery() {
+			
+			isPartial = false;
+			hasTag = false;
+			isFull = false;
+			fullColor = Color.black;
+			partialColor = Color.black;
+			queuePos = -1;
+		}
+	}
+	
 	TopoTree m_tree = null;									// tree containing all the nodes
+
+	public class Tag {
+		
+		
+		public HashSet<Integer> items = null;
+		public HashSet<TopoTreeNode> full_components = null;
+		public HashSet<TopoTreeNode> part_components = null;
+		
+		public Color tag_color = null;
+		public String name = null;
+		
+		public boolean is_select = false;
+		public boolean is_item = false;
+		
+		public String to_file( ) {
+
+			String str = name+"::";
+			str += tag_color.getRed() + "," + tag_color.getGreen() + "," + tag_color.getBlue() + "::";
+			int k = 0;
+			for( Integer item : items ) {
+				
+				if( k < items.size()-1 )
+					str += (item+",");
+				else
+					str += item;
+					
+				k++;
+			}
+			
+			return str;
+		}
+		
+		public Tag( String file_line ) {
+			
+			this("",Color.black);
+			
+			// load from string
+			String[] fields = file_line.split("::");			
+			name = fields[0];
+			
+			String[] color_fields = fields[1].split(",");
+			tag_color = new Color(Integer.parseInt(color_fields[0]),
+							Integer.parseInt(color_fields[1]),
+							Integer.parseInt(color_fields[2]));
+			
+			if( fields.length > 2) {
+			
+				String[] itemnum_fields = fields[2].split(",");
+				ArrayList<Integer> item_input = new ArrayList<Integer>();
+				for( String itemstr : itemnum_fields ) {
 	
-	public HashMap<Integer,Color> color_map = null;				// maps tag # to tag color
-	public HashMap<Integer,HashSet<Integer>> item_map = null;		// maps tag # to list of nodes with that tag
-	public HashMap<Integer,String> name_map = null;				// maps tag # to string name of the tag
+					item_input.add( Integer.parseInt(itemstr));
+				}
+				
+				addItem(item_input);
+			}
+		}
+
+		public void addComponent( TopoTreeNode node ) {
+			
+			// add the sub items
+			
+			items.addAll(node.component);
+			
+			// add to full
+			
+			addSubtreeToFull(node);
+			
+			// add parents
+			
+			TopoTreeNode parent = node.parent;
+			while( parent != null ) {
+				
+				if( full_components.contains(parent) )
+					break;
+				
+				if( part_components.contains(parent) ) {
+				
+					// determine if we've filled the component to full
+					
+					boolean isFull = parent.containsOnlyItems(items);
+					
+					// if we didn't fill it up, then 
+					
+					if( isFull ) {
+
+						part_components.remove(parent);
+						full_components.add(parent);
+					}
+					
+					break;
+				}
+				else {
+				
+					part_components.add(parent);
+				}
+				
+				parent = parent.parent;
+			}
+			
+		}
+		
+		public void addItem( ArrayList<Integer> add_items ) {
+			
+			items.addAll(add_items);
+			
+			// let's update the components
+			
+			Stack<TopoTreeNode> stack = new Stack<TopoTreeNode>();
+			for( TopoTreeNode root : m_tree.roots ) {
+				
+				stack.push(root);
+			}
+			while( ! stack.isEmpty() ) {
+				
+				TopoTreeNode node = stack.pop();
+				if( node.containsAnyItems(add_items)) {
+					
+					if( node.containsOnlyItems(add_items) ) {
+						
+						// add the remaining to the full
+						
+						addSubtreeToFull(node);
+					}
+					else {
+						
+						part_components.add(node);
+						
+						// add the children
+						for( TopoTreeNode child : node.children ) {
+							
+							stack.push(child);
+						}
+					}
+				}
+			}
+		}
+
+		private void removeSubtreeFromAll( TopoTreeNode node  ) {
+
+			if( part_components.contains(node) ) {
+				part_components.remove(node);
+			}
+			if( full_components.contains(node) ) {
+				full_components.remove(node);
+			}
+			
+			for( TopoTreeNode child : node.children ) {
+
+				removeSubtreeFromAll(child);
+			}
+		}
+		private void addSubtreeToFull( TopoTreeNode node ) {
+			
+			full_components.add( node );
+			
+			if( part_components.contains(node) ) {
+				part_components.remove(node);
+			}
+			
+			for( TopoTreeNode child : node.children ) {
+
+				addSubtreeToFull(child);
+			}
+		}
+		
+		public void removeItem( ArrayList<Integer> rem_items ) {
+			
+			items.removeAll(rem_items);
+			
+			// let's update the components
+			
+			ArrayList<TopoTreeNode> later_nodes = new ArrayList<TopoTreeNode>();
+			Stack<TopoTreeNode> stack = new Stack<TopoTreeNode>();
+			for( TopoTreeNode root : m_tree.roots ) {
+				
+				stack.push(root);
+			}
+			while( ! stack.isEmpty() ) {
+				
+				TopoTreeNode node = stack.pop();
+				if( node.containsAnyItems(rem_items)) {
+					
+					if( node.containsOnlyItems(rem_items) ) {
+						
+						later_nodes.add(node);
+					}
+					else if(node.children.size()>0) {
+						
+						// add the children
+						for( TopoTreeNode child : node.children ) {
+							
+							stack.push(child);
+						}
+					}
+					else {
+						later_nodes.add(node);
+					}
+				}
+			}
+			
+			for( TopoTreeNode node : later_nodes ) {
+				
+				removeComponent(node);
+			}
+		}
+		
+		public void removeComponent( TopoTreeNode node ) {
+			
+			if( ! full_components.contains(node) && ! part_components.contains(node) ) 
+				return;
+			
+			items.removeAll(node.component);
+			
+			removeSubtreeFromAll( node );
+			
+			TopoTreeNode parent = node.parent;
+			while( parent != null ) {
+				
+				if( full_components.contains(parent) ) {
+					
+					full_components.remove(parent);
+					part_components.add(parent);
+				}
+				
+				boolean remove_from_part = true;
+				for( TopoTreeNode child : parent.children ) {
+
+					if( part_components.contains(child) || full_components.contains(child) ) {
+						
+						remove_from_part = false;
+					}
+				}
+				if( remove_from_part ) {
+
+					part_components.remove(parent);
+				}
+				
+				parent = parent.parent;
+			}
+		}
+		
+		public Tag( String name, Color tag_color ) {
+			
+			this.name = name;
+			this.tag_color = tag_color;
+			
+			items = new HashSet<Integer>();
+			full_components = new HashSet<TopoTreeNode>();
+			part_components = new HashSet<TopoTreeNode>();
+		}
+		
+		public String toString() {
+			
+			String val = "";
+			
+			val += "Name: "  + name + "\n";
+			val += "Color: " + tag_color + "\n";
+			val += "Items: ";
+			for( Integer item : items ) {
+				
+				val += (item + ",");
+			}
+			val += "\n";
+			val += "Partial: ";
+			for( TopoTreeNode node : part_components ) {
+				
+				val += "\t[";
+				for( Integer item : node.component ) {
+					
+					val += (item + ",");
+				}
+				val += "]\n";
+			}
+			val += "\n";
+			val += "Full: ";
+			for( TopoTreeNode node : full_components ) {
+				
+				val += "\t[";
+				for( Integer item : node.component ) {
+					
+					val += (item + ",");
+				}
+				val += "]\n";
+			}
+			val += "\n";
+			
+			return val;
+		}
+	}
 	
+	public ArrayList<Tag> tag_queue = null;	// list of tags	
+	public ArrayList<Tag> tag_order_added = null;	// list of tags	
 	ArrayList<TagChangeListener> tagChangeListeners = null; 
-	public ArrayList<Integer> tagPriority = null;
-	
 	String m_tagFilename = null;							// tag filename to which we save the tag info
 
-	public void promoteTag( Integer tag_num ) {
+	public void promoteTag( Tag tag ) {
 		
-		int current_idx = tagPriority.indexOf( tag_num );
+		int current_idx = tag_queue.indexOf( tag );
 		if( current_idx > 0 ) {
 			
-			tagPriority.remove(tag_num);
-			tagPriority.add(current_idx-1,tag_num);
+			tag_queue.remove(current_idx);
+			tag_queue.add(0,tag);
 		}
 		
 		// notify tag listeners to redraw
@@ -43,38 +351,57 @@ public class TagTable {
 		}		
 	}
 	
-	public Integer getTopTag( Integer tagA, Integer tagB ) {
+	public void promoteTagSilent( Tag tag ) {
 		
-		return (tagPriority.indexOf(tagA)<tagPriority.indexOf(tagB))?tagA:tagB;
-	}
-	
-	public int getTopTag( Set<Integer> tags ) {
-		
-		int min_priority = Integer.MAX_VALUE;
-		int return_tag = -1;
-		for( Integer i : tags ) {
+		int current_idx = tag_queue.indexOf( tag );
+		if( current_idx > 0 ) {
 			
-			if( tagPriority.indexOf(i) < min_priority ) {
-				
-				return_tag = i;
-			}
-		}
-		
-		return return_tag;
+			tag_queue.remove(current_idx);
+			tag_queue.add(0,tag);
+		}		
 	}
 	
 	public TagTable(TopoTree tree) {
 
 		// create lists
 		
-		color_map = new HashMap<Integer, Color>();
-		item_map = new HashMap<Integer, HashSet<Integer>>();
-		name_map = new HashMap<Integer, String>();
-		tagPriority = new ArrayList<Integer>();
+		tagChangeListeners = new ArrayList<TagChangeListener>();
+		
+		tag_queue = new ArrayList<TagTable.Tag>();		
+		tag_order_added = new ArrayList<TagTable.Tag>();
 		
 		m_tree = tree;
 		
-		tagChangeListeners = new ArrayList<TagChangeListener>();
+		newTag("ITEM");
+		topTag().is_item= true;
+		topTag().tag_color = Color.black;
+		newTag("Selected Nodes");
+		promoteTag(tag_queue.get(tag_queue.size()-1));
+		topTag().is_select = true;
+		topTag().tag_color = PrettyColors.Red;
+		
+	}
+	
+	public Tag getSelTag() {
+		
+		for( Tag t : tag_queue ) {
+			
+			if( t.is_select )
+				return t;
+		}
+		
+		return null;
+	}
+	
+	public Tag getItemTag() {
+		
+		for( Tag t : tag_queue ) {
+			
+			if( t.is_item )
+				return t;
+		}
+		
+		return null;
 	}
 	
 	public void addTagChangeListener( TagChangeListener listener ) {
@@ -82,15 +409,10 @@ public class TagTable {
 		tagChangeListeners.add( listener );
 	}
 	
-	public void killTag( Integer tag_number ) {
+	public void killTag( Tag tag ) {
 		
-		ArrayList<Integer> x = new ArrayList<Integer>(item_map.get(tag_number));
-		removeTag( tag_number, x );
-		
-		item_map.remove(tag_number);
-		name_map.remove(tag_number);
-		color_map.remove(tag_number);
-		tagPriority.remove(tag_number);
+		tag_queue.remove( tag );
+		tag_order_added.remove(tag);
 		
 		// notify tag listeners to redraw
 		
@@ -100,28 +422,11 @@ public class TagTable {
 		}		
 	}
 	
-	public int newTag( String tagName ) {
+	public void newTag( String tagName ) {
 		
-		int tag_number=0;
-		
-		System.out.println("Adding tag: " + tagName);
-		
-		// get the maximum tag number
-		
-		for( Integer i : name_map.keySet() ) {
-			
-			if( tag_number <= i ) {
-				
-				tag_number = i + 1;
-			}
-		}
-		
-		// create tag entries
-		
-		name_map.put(tag_number, tagName);
-		color_map.put(tag_number, PrettyColors.colorFromInt(tag_number));
-		item_map.put(tag_number, new HashSet<Integer>());
-		tagPriority.add(tag_number);
+		Tag tag = new Tag( tagName, PrettyColors.colorFromInt(tag_queue.size()+1) );
+		tag_queue.add(tag);
+		tag_order_added.add(tag);
 		
 		// notify tag listeners to redraw
 		
@@ -129,8 +434,6 @@ public class TagTable {
 			
 			tagChangeListener.tagsChanged();
 		}
-		
-		return tag_number;
 	}
 	
 	/*
@@ -140,9 +443,9 @@ public class TagTable {
 		
 		boolean tag_exists = false;
 		
-		for( Integer tag_number: name_map.keySet() ) {
+		for( Tag tag: tag_queue ) {
 			
-			if( tagName == name_map.get(tag_number) ) {
+			if( tagName.compareTo( tag.name ) == 0 ) {
 				
 				tag_exists = true;
 				break;
@@ -151,139 +454,7 @@ public class TagTable {
 		
 		return tag_exists;
 	}
-	
 
-	public void addTag( Integer tag_number, ArrayList<TopoTreeNode> nodes ) {
-		
-		HashSet<Integer> items = new HashSet<Integer>();
-		
-		// check if this key even exists
-		if( name_map.containsKey(tag_number) ) {
-			
-			// loop through the tagged items
-			for( TopoTreeNode node : nodes ) {
-				
-				node.tags.put(new Integer(tag_number), node.component.size());
-				node.tag_colors.put(new Integer(tag_number), color_map.get(tag_number));
-				for( Integer item : node.component ) {
-					
-					items.add(item);
-//					if( !item_map.get(tag_number).contains(item) ) {
-//						
-//						item_map.get(tag_number).add(item);
-//					}
-				}
-			}
-		}
-		
-		addTag(tag_number, new ArrayList<Integer>(items));
-//		
-//		// notify tag listeners to redraw
-//		
-//		for( TagChangeListener tagChangeListener : tagChangeListeners ) {
-//			
-//			tagChangeListener.tagsChanged();
-//		}
-	}
-	
-	public void removeTag( Integer tag_number, ArrayList<TopoTreeNode> nodes ) {
-
-		HashSet<Integer> items = new HashSet<Integer>();
-		if( name_map.containsKey(tag_number) ) {
-		
-			for( TopoTreeNode node : nodes ) {
-
-				for( Integer item : node.component ) {
-					
-					items.add(item);
-				}
-			}
-		}
-		
-		removeTag( tag_number, new ArrayList<Integer>(items) );
-	}
-	
-	/*
-	 * Adds the tag "tag_number" to the nodes in the list "items"
-	 */
-	public void addTag( int tag_number, ArrayList<Integer> items ) {
-
-		// check if this key even exists
-		if( name_map.containsKey(tag_number) ) {
-			
-			// loop through the tagged items
-			for( Integer item : items ) {
-				
-				// add the item to the tag map (if it isn't there)
-				if( !item_map.get(tag_number).contains(item) ) {
-										
-					item_map.get(tag_number).add(item);
-					
-					// traverse the tree
-					for( TopoTreeNode[] nodes : m_tree.tree_lookup ) {
-						
-						// update the tree nodes that their tag counts have changed						
-						if(!nodes[item].tags.containsKey(tag_number)) {
-							nodes[item].tags.put(tag_number,1);
-							nodes[item].tag_colors.put(tag_number, color_map.get(tag_number));
-						}
-						else {
-							nodes[item].tags.put(tag_number,nodes[item].tags.get(tag_number)+1);
-						}
-					}
-				}
-			}
-		}
-		
-		// notify tag listeners to redraw
-		
-		for( TagChangeListener tagChangeListener : tagChangeListeners ) {
-			
-			tagChangeListener.tagsChanged();
-		}
-	}
-
-	/*
-	 * Removes the tag "tag number" to the nodes in the list "items"
-	 */
-	public void removeTag( int tag_number, ArrayList<Integer> items ) {
-		
-		// check if this key even exists
-		if( name_map.containsKey(tag_number) ) {
-			
-			// loop through the un-tagged items
-			for( Integer item : items ) {
-				
-				// check if the item isn't in the tag map
-				if( item_map.get(tag_number).contains(item) ) {
-										
-					item_map.get(tag_number).remove(item); // remove the item
-					
-					// traverse the tree
-					for( TopoTreeNode[] nodes : m_tree.tree_lookup ) {
-						
-						// update the tree nodes that their tag counts have changed
-						if(nodes[item].tags.containsKey(tag_number) ) {
-							
-							nodes[item].tags.put(tag_number,nodes[item].tags.get(tag_number)-1);
-						
-							// delete the tag from the node if it no longer exists
-							if( nodes[item].tags.get(tag_number) == 0 ) {
-								
-								nodes[item].tags.remove(tag_number);
-								nodes[item].tag_colors.remove(tag_number);
-							}
-						}
-					}
-				}
-			}
-		}
-		
-		for( TagChangeListener tagChangeListener : tagChangeListeners ) {
-			
-			tagChangeListener.tagsChanged();
-		}
-	}
 	
 	/*
 	 * Constructs and applies tags from a file
@@ -296,33 +467,16 @@ public class TagTable {
 			
 			BufferedReader breader = new BufferedReader( new FileReader(tagFileName) );
 			
-			int tag_number = 0;
 			String lineStr = breader.readLine();
 			while( lineStr != null && lineStr.length() > 0 ) {
 
 				// parse the tag line 
 				
-				String[] fields = lineStr.split("::");
-				name_map.put(new Integer(tag_number), fields[0]);
-				String[] color_fields = fields[1].split(",");
-				color_map.put(tag_number, 
-						new Color(Integer.parseInt(color_fields[0]),
-								Integer.parseInt(color_fields[1]),
-								Integer.parseInt(color_fields[2])));
-				String[] itemnum_fields = fields[2].split(",");
-				item_map.put(tag_number, new HashSet<Integer>());
-				tagPriority.add(tag_number);
-
-				ArrayList<Integer> items = new ArrayList<Integer>();
-				for( String itemstr : itemnum_fields ) {
-
-					items.add(Integer.parseInt(itemstr));
-				}
-				addTag(tag_number,items);
+				Tag newTag = new Tag( lineStr );
+				tag_queue.add( newTag );
+				tag_order_added.add( newTag );
 				
 				lineStr = breader.readLine();
-				
-				tag_number++;
 			}
 			
 			breader.close();
@@ -342,29 +496,220 @@ public class TagTable {
 			m_tagFilename = tagFileName;
 			FileWriter fw = new FileWriter(m_tagFilename);
 			BufferedWriter bw = new BufferedWriter(fw);
-			for( Integer tag_number : tagPriority ) {
-				
-				String str = "";
-				str += "" + name_map.get(tag_number) + "::";
-				str += "" + color_map.get(tag_number).getRed() 
-						+ "," + color_map.get(tag_number).getGreen() 
-						+ "," + color_map.get(tag_number).getBlue() + "::";
-				int k = 0;
-				int ksize = item_map.get(tag_number).size();
-				for(Integer item : item_map.get(tag_number) ) {
-					
-					str += item;
-					if( k < ksize-1)
-						str += ",";
-					k++;
-				}
-				str += "\n";
-				bw.write(str);
+			for( Tag tag : tag_queue ) {
+
+				if( ! tag.is_select && ! tag.is_item )
+					bw.write( tag.to_file() + "\n" );
 			}
 			bw.close();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
+
 			e.printStackTrace();
+		}
+	}
+	
+	public Tag topTag() {
+		
+		if( tag_queue.size() > 0 ) {
+			
+			return tag_queue.get(0);
+		}
+		
+		return null;
+	}
+	
+	public Tag topNonitemTag() {
+		
+		if( tag_queue.size() > 0 ) {
+			
+			return tag_queue.get(0).is_item ? (tag_queue.size()>1?tag_queue.get(1):null) : tag_queue.get(0); 
+		}
+		
+		return null;
+	}
+	
+	public Color itemColor( Integer item ) {
+		
+		for( int i = 0; i < tag_queue.size(); i++ ) {
+			
+			Tag tag = tag_queue.get(i); 			
+			if( tag.items.contains(item) ) {
+				
+				return tag.tag_color;
+			}
+		}
+		
+		return null;
+	}
+	
+	public void addFromActiveSet( Tag t, ArrayList<Integer> active_set ) {
+
+		t.addItem(active_set);
+		promoteTag(t);
+	}
+	
+	public void remFromActiveSet( Tag t, ArrayList<Integer> active_set ) {
+
+		t.removeItem(active_set);
+		for( TagChangeListener tagChangeListener : tagChangeListeners ) {
+			
+			tagChangeListener.tagsChanged();
+		}
+	}
+	
+	public TagQuery queryNode( TopoTreeNode node ) {
+		
+		TagQuery tq = new TagQuery();
+		
+		for( int i = 0; i < tag_queue.size(); i++ ) {
+			
+			Tag tag = tag_queue.get(i); 
+			if( ! tq.isPartial && tag.part_components.contains(node) ) {
+				
+				tq.hasTag = true;
+				tq.partialColor = tag.tag_color;
+				tq.isPartial = true;
+				tq.queuePos = i;				
+			}
+			if( tag.full_components.contains(node) ) {
+				
+				tq.hasTag = true;
+				tq.fullColor = tag.tag_color;
+				tq.isFull = true;
+				if( ! tq.isPartial ) {
+					tq.queuePos = i;
+				}
+				
+				return tq;
+			}
+		}
+		
+		return tq;
+	}
+	
+	public static void main( String[] args ) {
+		
+		// create test tree
+		
+		TopoTree test_tree = new TopoTree();
+		test_tree.num_levels = 3;
+		TopoTreeNode a = new TopoTreeNode();
+		a.component = new ArrayList<Integer>();
+		TopoTreeNode b = new TopoTreeNode();
+		b.component = new ArrayList<Integer>();
+		TopoTreeNode c = new TopoTreeNode();
+		c.component = new ArrayList<Integer>();
+		TopoTreeNode d = new TopoTreeNode();
+		d.component = new ArrayList<Integer>();
+		TopoTreeNode e = new TopoTreeNode();
+		e.component = new ArrayList<Integer>();
+		TopoTreeNode f = new TopoTreeNode();
+		f.component = new ArrayList<Integer>();
+		TopoTreeNode g = new TopoTreeNode();
+		g.component = new ArrayList<Integer>();
+		TopoTreeNode h = new TopoTreeNode();
+		h.component = new ArrayList<Integer>();
+
+		a.component.add(1);
+		a.component.add(2);
+		a.component.add(3);
+		a.component.add(4);
+		a.component.add(5);
+		a.children.add(b);
+		a.children.add(c);
+		a.parent = null;
+		
+		b.parent = a;
+		b.children.add(d);
+		b.children.add(e);
+		b.component.add(1);
+		b.component.add(2);
+		
+		c.parent = a;
+		c.children.add(f);
+		c.children.add(g);
+		c.children.add(h);
+		c.component.add(3);
+		c.component.add(4);
+		c.component.add(5);
+		
+		d.parent = b;
+		d.component.add(1);
+		
+		e.parent = b;
+		e.component.add(2);
+		
+		f.parent = c;
+		f.component.add(3);
+		
+		g.parent = c;
+		g.component.add(4);
+		
+		h.parent = c;
+		h.component.add(5);
+
+		test_tree.roots.add(a);
+		
+		System.out.println("Created test tree");
+		
+		TagTable test_table = new TagTable(test_tree);
+		
+		System.out.println("Created test table");
+		
+		// create a pair of tags
+		
+		test_table.newTag("TEST TAG 1");
+		test_table.newTag("TEST TAG 2");
+		
+		System.out.println("Created two tags");
+		
+		// add points to the tag
+		
+		ArrayList<Integer> test_item_set = new ArrayList<Integer>();
+		test_item_set.add(1);
+		test_item_set.add(2);
+		ArrayList<Integer> test_item_set_2 = new ArrayList<Integer>();
+		test_item_set_2.add(2);
+		ArrayList<Integer> test_item_set_3 = new ArrayList<Integer>();
+		test_item_set_3.add(1);
+
+		test_table.topTag().addItem(test_item_set);
+		System.out.println("Top Tag after item add = " + test_table.topTag());		
+		
+		// remove points from the tag
+		
+		test_table.topTag().removeItem(test_item_set_2);
+		System.out.println("Top Tag after item remove A = " + test_table.topTag());		
+		test_table.topTag().removeItem(test_item_set_3);
+		System.out.println("Top Tag after item remove B = " + test_table.topTag());		
+		
+		// add component
+		
+		test_table.topTag().addComponent( c );
+		System.out.println("Top Tag after comp add = " + test_table.topTag());		
+
+		// remove component
+		
+		test_table.topTag().removeComponent( f );
+		System.out.println("Top Tag after comp remove f = " + test_table.topTag());		
+
+		test_table.topTag().removeComponent( g );
+		System.out.println("Top Tag after comp remove g = " + test_table.topTag());		
+
+		test_table.topTag().removeComponent( h );
+		System.out.println("Top Tag after comp remove h = " + test_table.topTag());		
+
+		// save and load to file
+		
+		test_table.topTag().addComponent(b);
+		test_table.saveTagFile("/Users/sfingram/Documents/test_table.txt");
+		TagTable test_table_2 = new TagTable(test_tree);
+		test_table_2.loadTagFile("/Users/sfingram/Documents/test_table.txt");
+		System.out.println("Loaded Tag = ");
+		for( Tag tag : test_table_2.tag_queue ) {
+			
+			
+			System.out.println(""+tag);		
 		}
 	}
 }

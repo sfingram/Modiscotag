@@ -1,7 +1,11 @@
 package snappy.graph;
 
 import snappy.data.*;
+import snappy.graph.TagTable.Tag;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -206,6 +210,24 @@ public class GraphManager {
 		}
 	}
 	
+	public void outputSimpleEdgesToFile( String filename ) {
+		
+		try {
+			FileWriter fw = new FileWriter(filename);
+			BufferedWriter bw = new BufferedWriter(fw);
+			for( ArrayList<SimpleEdge> edges : nodeEdgeLookup ) {
+				for( SimpleEdge edge : edges ) {
+					
+//					bw.write( "" + edge.iter + " " + edge.w + " " + edge.src + " " + edge.dst+ "\n" );
+				}
+			}
+			bw.close();
+		} catch (IOException e) {
+
+			e.printStackTrace();
+		}
+	}
+	
 	/**
 	 * Updates the graph structure.  Returns false if we require further updating
 	 * 
@@ -228,7 +250,8 @@ public class GraphManager {
 			isComplete = false;
 			
 			nodeEdgeLookup.get(se.src).add(se);
-			nodeEdgeLookup.get(se.dst).add(new SimpleEdge( se.dst, se.src, se.w ));
+			if( se.dst != se.src )
+				nodeEdgeLookup.get(se.dst).add(new SimpleEdge( se.dst, se.src, se.w/*, se.iter */));
 			edge_list.add(se);
 		}
 		else {
@@ -273,23 +296,29 @@ public class GraphManager {
 	 */
 	public int[] getHisto( int bins, int max_edge_count ) {
 		
-		int[] retBins = new int[bins];		
-		Arrays.fill(retBins, 0);
-		
-		double bin_size = 1.0 / ((double) bins);
-		int n = 0;
-//		System.out.println("edge_list size = " + edge_list.size() + " max edge = " + max_edge_count);
-		for( SimpleEdge se : edge_list ) {
-			n++;
-			int k = Math.max(0,Math.min(bins-1, (int) Math.floor((double)(se.w) / bin_size)));			
-			retBins[ k ]++;
-//			if( n++ > max_edge_count )
-//				break;			
+		if( nzd != null ) {
+			
+			return nzd.uniformHistogram( bins, this.getNodeCount() * 2 );
 		}
-		
-//		System.out.println("n = " + n);
-		
-		return retBins;
+		else {
+			int[] retBins = new int[bins];		
+			Arrays.fill(retBins, 0);
+			
+			double bin_size = 1.0 / ((double) bins);
+			int n = 0;
+	//		System.out.println("edge_list size = " + edge_list.size() + " max edge = " + max_edge_count);
+			for( SimpleEdge se : edge_list ) {
+				n++;
+				int k = Math.max(0,Math.min(bins-1, (int) Math.floor((double)(se.w) / bin_size)));			
+				retBins[ k ]++;
+	//			if( n++ > max_edge_count )
+	//				break;			
+			}
+			
+	//		System.out.println("n = " + n);
+			
+			return retBins;
+		}
 	}
 	
 }

@@ -5,7 +5,7 @@ import java.util.HashMap;
 
 public class TopoTree {
 
-	int num_levels;  						// number of levels in the tree
+	public int num_levels;  						// number of levels in the tree
 	float[] levels;  						// the indifferentiated values at each level 
 	public ArrayList<TopoTreeNode> roots = null; 	// root nodes to the tree (usually just one)
 	public HashMap<Integer,Integer> component_sizes = null;
@@ -34,16 +34,22 @@ public class TopoTree {
 		return nodes;
 	}
 	
+	public TopoTree() {
+		
+		component_sizes = new HashMap<Integer, Integer>();
+		roots = new ArrayList<TopoTreeNode>();
+		tree_lookup = new ArrayList<TopoTreeNode[]>();
+		level_lookup = new ArrayList<ArrayList<TopoTreeNode>>();
+	}
+	
 	//
 	// constructor takes a graph and the number of levels to tree you want to compute
 	//
 	public TopoTree( GraphManager gm, float[] levels ) {
 		
-		component_sizes = new HashMap<Integer, Integer>();
+		this();
+		
 		num_levels = levels.length;
-		roots = new ArrayList<TopoTreeNode>();
-		tree_lookup = new ArrayList<TopoTreeNode[]>();
-		level_lookup = new ArrayList<ArrayList<TopoTreeNode>>();
 		
 		for( int i = 0; i < num_levels; i++ ) {
 			
@@ -66,7 +72,8 @@ public class TopoTree {
 
 				// build the new node
 				
-				TopoTreeNode ttn = new TopoTreeNode();				
+				TopoTreeNode ttn = new TopoTreeNode();	
+				ttn.level = i;
 				ttn.num_points = sub_components.get(j).size();
 				ttn.component = sub_components.get(j);
 				
